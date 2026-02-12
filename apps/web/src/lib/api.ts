@@ -192,6 +192,21 @@ export async function issueDevToken(userId: string, email?: string): Promise<str
   return json.access_token;
 }
 
+export async function fetchLastSession(
+  token: string
+): Promise<{ project_id?: string | null; page_id?: string | null; file_name?: string | null }> {
+  const res = await fetch(`${API_URL}/api/v1/me/last-session`, {
+    method: "GET",
+    headers: authHeaders(token),
+    cache: "no-store"
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Failed to fetch last session");
+  }
+  return (await res.json()) as { project_id?: string | null; page_id?: string | null; file_name?: string | null };
+}
+
 export async function presignUpload(
   params: { fileName: string; contentType: string },
   token: string

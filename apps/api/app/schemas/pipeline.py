@@ -101,3 +101,9 @@ class PresignDownloadResponse(BaseModel):
     key: str
     url: str
     expires_in_sec: int
+
+
+class LastSessionResponse(BaseModel):
+    project_id: str | None = None
+    page_id: str | None = None
+    file_name: str | None = None

@@ -21,6 +21,7 @@ from app.schemas.pipeline import (
     ArtifactLinks,
     JobCreateResponse,
     JobStatusResponse,
+    LastSessionResponse,
     PipelineResponse,
     PipelineRunRead,
     PresignDownloadResponse,
@@ -422,3 +423,24 @@ async def list_runs(
         )
         for job, page in rows
     ]
+
+
+@router.get("/me/last-session", response_model=LastSessionResponse)
+async def get_last_session(
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+) -> LastSessionResponse:
+    row = (
+        db.execute(
+            select(JobRun, Page)
+            .join(Page, Page.id == JobRun.page_id)
+            .where(JobRun.owner_id == current_user.user_id)
+            .order_by(JobRun.created_at.desc())
+            .limit(1)
+        )
+        .first()
+    )
+    if not row:
+        return LastSessionResponse()
+    job, page = row
+    return LastSessionResponse(project_id=job.project_id, page_id=job.page_id, file_name=page.file_name)

@@ -5,6 +5,7 @@ import {
   createPipelineJob,
   fetchPageRegions,
   fetchPipelineJob,
+  fetchLastSession,
   fetchPageInput,
   issueDevToken,
   patchRegion,
@@ -278,19 +279,31 @@ export function EditorWorkbench() {
   const effectiveToolMode: ToolMode = isSpacePanning ? "pan" : toolMode;
 
   useEffect(() => {
+    let cancelled = false;
     const initToken = async () => {
       try {
         const storageKey = "mangaflow_dev_user_id";
         const existing = window.localStorage.getItem(storageKey);
         const userId = existing || `dev-user-${Math.random().toString(36).slice(2, 10)}`;
         if (!existing) window.localStorage.setItem(storageKey, userId);
-        const token = await issueDevToken(userId);
-        setAuthToken(token);
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          try {
+            const token = await issueDevToken(userId);
+            if (!cancelled) setAuthToken(token);
+            return;
+          } catch {
+            await sleep(600 + attempt * 500);
+          }
+        }
+        if (!cancelled) setNotice("JWT dev-token недоступен. Работа в local-only режиме.");
       } catch {
-        setNotice("JWT dev-token недоступен. Работа в local-only режиме.");
+        if (!cancelled) setNotice("JWT dev-token недоступен. Работа в local-only режиме.");
       }
     };
     void initToken();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -299,26 +312,27 @@ export function EditorWorkbench() {
       setRestored(true);
       return;
     }
-    const raw = window.localStorage.getItem("mangaflow_last_session");
-    if (!raw) {
-      setRestored(true);
-      return;
-    }
-    let session: { project_id?: string; page_id?: string; file_name?: string } = {};
-    try {
-      session = JSON.parse(raw) as { project_id?: string; page_id?: string; file_name?: string };
-    } catch {
-      window.localStorage.removeItem("mangaflow_last_session");
-      setRestored(true);
-      return;
-    }
-    if (!session.project_id || !session.page_id) {
-      setRestored(true);
-      return;
-    }
 
     const restore = async () => {
+      let session: { project_id?: string | null; page_id?: string | null; file_name?: string | null } = {};
       try {
+        session = await fetchLastSession(authToken);
+        if (!session.project_id || !session.page_id) {
+          const raw = window.localStorage.getItem("mangaflow_last_session");
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw) as { project_id?: string; page_id?: string; file_name?: string };
+              session = parsed;
+            } catch {
+              window.localStorage.removeItem("mangaflow_last_session");
+            }
+          }
+        }
+        if (!session.project_id || !session.page_id) {
+          setRestored(true);
+          return;
+        }
+
         const blob = await fetchPageInput(
           { projectId: session.project_id as string, pageId: session.page_id as string },
           authToken
