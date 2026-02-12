@@ -5,6 +5,7 @@ import {
   createPipelineJob,
   fetchPageRegions,
   fetchPipelineJob,
+  getPageArtifacts,
   issueDevToken,
   patchRegion,
   runPipeline
@@ -271,6 +272,7 @@ export function EditorWorkbench() {
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [notice, setNotice] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
 
   const currentPage = pages[activePageIndex] ?? null;
   const effectiveToolMode: ToolMode = isSpacePanning ? "pan" : toolMode;
@@ -290,6 +292,95 @@ export function EditorWorkbench() {
     };
     void initToken();
   }, []);
+
+  useEffect(() => {
+    if (!authToken || restored) return;
+    if (pages.length > 0) {
+      setRestored(true);
+      return;
+    }
+    const raw = window.localStorage.getItem("mangaflow_last_session");
+    if (!raw) {
+      setRestored(true);
+      return;
+    }
+    let session: { project_id?: string; page_id?: string; file_name?: string } = {};
+    try {
+      session = JSON.parse(raw) as { project_id?: string; page_id?: string; file_name?: string };
+    } catch {
+      window.localStorage.removeItem("mangaflow_last_session");
+      setRestored(true);
+      return;
+    }
+    if (!session.project_id || !session.page_id) {
+      setRestored(true);
+      return;
+    }
+
+    const restore = async () => {
+      try {
+        const artifacts = await getPageArtifacts(
+          { projectId: session.project_id as string, pageId: session.page_id as string },
+          authToken
+        );
+        const imageRes = await fetch(artifacts.input_url);
+        if (!imageRes.ok) throw new Error("Failed to download image");
+        const blob = await imageRes.blob();
+        const fileName = session.file_name || "restored.png";
+        const file = new File([blob], fileName, { type: blob.type || "image/png" });
+        const preview = await fileToDataURL(file);
+        const image_meta = await imageMetaFromDataURL(preview);
+        const serverRegions = await fetchPageRegions(
+          { projectId: session.project_id as string, pageId: session.page_id as string },
+          authToken
+        );
+
+        const mapped = serverRegions.map((region) =>
+          toEditorRegion({
+            id: region.external_region_id,
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height,
+            source_text: region.source_text,
+            translated_text: region.translated_text,
+            confidence: region.confidence
+          })
+        );
+
+        const regionMap = serverRegions.reduce<Record<string, string>>((acc, region) => {
+          acc[region.external_region_id] = region.id;
+          return acc;
+        }, {});
+
+        setPages([
+          {
+            id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            file,
+            file_name: file.name,
+            preview,
+            image_meta,
+            regions: mapped,
+            project_id: session.project_id as string,
+            server_page_id: session.page_id as string,
+            region_id_map: regionMap,
+            selected_region_id: mapped[0]?.id ?? null,
+            pipeline_status: "done",
+            pipeline_error: null
+          }
+        ]);
+        setActivePageIndex(0);
+        setDraftSourceText(mapped[0]?.source_text ?? "");
+        setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+      } catch (error) {
+        setNotice("Не удалось восстановить последнюю сессию.");
+      } finally {
+        setRestored(true);
+      }
+    };
+
+    void restore();
+  }, [authToken, restored, pages.length]);
 
   const quality = useMemo(() => {
     if (!currentPage) return { total: 0, approved: 0, progress: 0 };
@@ -655,6 +746,10 @@ export function EditorWorkbench() {
               pipeline_status: "done",
               pipeline_error: null
             }));
+            window.localStorage.setItem(
+              "mangaflow_last_session",
+              JSON.stringify({ project_id: created.project_id, page_id: created.page_id, file_name: currentPage.file_name })
+            );
             setDraftSourceText(mapped[0]?.source_text ?? "");
             setDraftTranslatedText(mapped[0]?.translated_text ?? "");
             break;

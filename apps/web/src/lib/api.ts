@@ -143,6 +143,22 @@ export async function fetchPageRegions(
   return (await res.json()) as ServerRegion[];
 }
 
+export async function getPageArtifacts(
+  params: { projectId: string; pageId: string },
+  token: string
+): Promise<{ input_url: string; output_json_url?: string | null; output_preview_url?: string | null }> {
+  const res = await fetch(`${API_URL}/api/v1/projects/${params.projectId}/pages/${params.pageId}/artifacts`, {
+    method: "GET",
+    headers: authHeaders(token),
+    cache: "no-store"
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Failed to fetch page artifacts");
+  }
+  return (await res.json()) as { input_url: string; output_json_url?: string | null; output_preview_url?: string | null };
+}
+
 export async function issueDevToken(userId: string, email?: string): Promise<string> {
   const form = new FormData();
   form.append("user_id", userId);
