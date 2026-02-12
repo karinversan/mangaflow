@@ -26,6 +26,11 @@
 - MinIO(S3): исходники и промежуточные артефакты.
 - Redis: queue/cache/rate-limiter backend.
 
+## Data flow
+- Landing page uploads an image to `/api/v1/pipeline/run` via `runPipeline`; the API forwards the file and `target_lang` to the stub adapter.
+- `run_stub_pipeline` synthesizes deterministic boxes, inpaint/noise placeholders, OCR phrases, and translated text that mirrors the contract future ML models must maintain.
+- Each submission is recorded in `pipeline_runs`, so the editor can show history and exports while QA retains the same region schema downstream.
+
 ## Target domain model (next increment)
 - `users`
 - `projects`
