@@ -45,3 +45,21 @@ def presign_get_url(key: str) -> str:
         Params={"Bucket": settings.s3_bucket, "Key": key},
         ExpiresIn=settings.signed_url_expires_sec,
     )
+
+
+def presign_put_url(key: str, content_type: str) -> str:
+    client: BaseClient = get_s3_client()
+    return client.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": settings.s3_bucket, "Key": key, "ContentType": content_type},
+        ExpiresIn=settings.signed_url_expires_sec,
+    )
+
+
+def key_exists(key: str) -> bool:
+    client: BaseClient = get_s3_client()
+    try:
+        client.head_object(Bucket=settings.s3_bucket, Key=key)
+        return True
+    except Exception:
+        return False

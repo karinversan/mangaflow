@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from os.path import basename
 
 import jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 
 from app.core.auth import AuthUser, get_current_user
 from app.core.config import settings
@@ -22,12 +23,14 @@ from app.schemas.pipeline import (
     JobStatusResponse,
     PipelineResponse,
     PipelineRunRead,
+    PresignDownloadResponse,
+    PresignUploadResponse,
     RegionPatchRequest,
     RegionRead,
 )
 from app.services.job_queue import enqueue_job
 from app.services.pipeline_service import run_pipeline as run_pipeline_service
-from app.services.storage import build_input_key, presign_get_url, upload_bytes
+from app.services.storage import build_input_key, key_exists, presign_get_url, presign_put_url, upload_bytes
 
 router = APIRouter()
 
@@ -62,6 +65,42 @@ def _create_page(
     return page
 
 
+def _enforce_key_access(owner_id: str, key: str) -> None:
+    if key.startswith(f"input/{owner_id}/") or key.startswith(f"output/{owner_id}/"):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden key access.")
+
+
+@router.post("/storage/presign-upload", response_model=PresignUploadResponse)
+async def presign_upload(
+    file_name: str = Form(...),
+    content_type: str = Form("application/octet-stream"),
+    current_user: AuthUser = Depends(get_current_user),
+) -> PresignUploadResponse:
+    safe_name = file_name.replace("/", "_")
+    key = f"input/{current_user.user_id}/uploads/{uuid.uuid4()}/{safe_name}"
+    return PresignUploadResponse(
+        key=key,
+        url=presign_put_url(key, content_type),
+        expires_in_sec=settings.signed_url_expires_sec,
+    )
+
+
+@router.get("/storage/presign-download", response_model=PresignDownloadResponse)
+async def presign_download(
+    key: str = Query(...),
+    current_user: AuthUser = Depends(get_current_user),
+) -> PresignDownloadResponse:
+    _enforce_key_access(current_user.user_id, key)
+    if not key_exists(key):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found.")
+    return PresignDownloadResponse(
+        key=key,
+        url=presign_get_url(key),
+        expires_in_sec=settings.signed_url_expires_sec,
+    )
+
+
 @router.post("/auth/dev-token")
 async def issue_dev_token(user_id: str = Form(...), email: str | None = Form(default=None)) -> dict[str, str]:
     if settings.api_env != "development":
@@ -75,23 +114,27 @@ async def issue_dev_token(user_id: str = Form(...), email: str | None = Form(def
 
 @router.post("/pipeline/jobs", response_model=JobCreateResponse)
 async def create_pipeline_job(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    input_s3_key: str | None = Form(default=None),
     target_lang: str = Form("ru"),
     provider: str = Form("stub"),
     request_id: str | None = Form(None),
     project_id: str | None = Form(None),
     project_name: str = Form("Default project"),
     page_index: int = Form(1),
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
     db: Session = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ) -> JobCreateResponse:
     pipeline_requests_total.inc()
     enforce_user_rate_limit(current_user.user_id)
 
-    raw = await file.read()
-    validate_upload(file.content_type, raw, settings.max_upload_mb)
+    if file is None and not input_s3_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide either file or input_s3_key.")
+    if file is not None and input_s3_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Use either file or input_s3_key, not both.")
 
-    resolved_request_id = request_id or str(uuid.uuid4())
+    resolved_request_id = request_id or x_request_id or str(uuid.uuid4())
     existing_job = db.execute(
         select(JobRun).where(JobRun.owner_id == current_user.user_id, JobRun.request_id == resolved_request_id)
     ).scalar_one_or_none()
@@ -106,16 +149,32 @@ async def create_pipeline_job(
 
     try:
         project = _resolve_or_create_project(db, current_user.user_id, project_id, project_name)
-        page = _create_page(
-            db,
-            project=project,
-            page_index=page_index,
-            file_name=file.filename or "upload.bin",
-            input_s3_key="",
-        )
-        input_key = build_input_key(current_user.user_id, project.id, page.id, file.filename or "upload.bin")
-        upload_bytes(input_key, raw, file.content_type or "application/octet-stream")
-        page.input_s3_key = input_key
+        if input_s3_key:
+            _enforce_key_access(current_user.user_id, input_s3_key)
+            if not key_exists(input_s3_key):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Input object not found.")
+            page = _create_page(
+                db,
+                project=project,
+                page_index=page_index,
+                file_name=basename(input_s3_key) or "upload.bin",
+                input_s3_key=input_s3_key,
+            )
+            input_key = input_s3_key
+        else:
+            assert file is not None
+            raw = await file.read()
+            validate_upload(file.content_type, raw, settings.max_upload_mb)
+            page = _create_page(
+                db,
+                project=project,
+                page_index=page_index,
+                file_name=file.filename or "upload.bin",
+                input_s3_key="",
+            )
+            input_key = build_input_key(current_user.user_id, project.id, page.id, file.filename or "upload.bin")
+            upload_bytes(input_key, raw, file.content_type or "application/octet-stream")
+            page.input_s3_key = input_key
 
         job = JobRun(
             owner_id=current_user.user_id,

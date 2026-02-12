@@ -33,7 +33,11 @@ API: http://localhost:8000/docs
 
 ## API quick reference
 - `POST /api/v1/auth/dev-token` (dev only): получить JWT для локальной разработки.
+- `POST /api/v1/storage/presign-upload`: получить signed URL для загрузки файла в MinIO.
+- `GET /api/v1/storage/presign-download?key=...`: signed URL для скачивания артефакта.
 - `POST /api/v1/pipeline/jobs`: создать async job.
+  - поддерживает `file` (multipart) или `input_s3_key` (если файл уже загружен в MinIO).
+  - для идемпотентности можно передавать `request_id` или header `X-Request-ID`.
 - `GET /api/v1/pipeline/jobs/{job_id}`: получить статус/результат job.
 - `PATCH /api/v1/projects/{project_id}/pages/{page_id}/regions/{region_id}`: сохранить правку региона.
 - `GET /api/v1/projects/{project_id}/pages/{page_id}/artifacts`: получить presigned URL артефактов.

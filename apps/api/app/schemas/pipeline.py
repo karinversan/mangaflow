@@ -89,3 +89,15 @@ class PipelineRunRead(BaseModel):
     target_lang: str
     region_count: int
     created_at: datetime
+
+
+class PresignUploadResponse(BaseModel):
+    key: str
+    url: str
+    expires_in_sec: int
+
+
+class PresignDownloadResponse(BaseModel):
+    key: str
+    url: str
+    expires_in_sec: int

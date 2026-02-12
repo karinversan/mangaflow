@@ -160,6 +160,43 @@ export async function issueDevToken(userId: string, email?: string): Promise<str
   return json.access_token;
 }
 
+export async function presignUpload(
+  params: { fileName: string; contentType: string },
+  token: string
+): Promise<{ key: string; url: string; expires_in_sec: number }> {
+  const form = new FormData();
+  form.append("file_name", params.fileName);
+  form.append("content_type", params.contentType);
+  const res = await fetch(`${API_URL}/api/v1/storage/presign-upload`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: form
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Failed to presign upload URL");
+  }
+  return (await res.json()) as { key: string; url: string; expires_in_sec: number };
+}
+
+export async function presignDownload(
+  key: string,
+  token: string
+): Promise<{ key: string; url: string; expires_in_sec: number }> {
+  const url = new URL(`${API_URL}/api/v1/storage/presign-download`);
+  url.searchParams.set("key", key);
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: authHeaders(token),
+    cache: "no-store"
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Failed to presign download URL");
+  }
+  return (await res.json()) as { key: string; url: string; expires_in_sec: number };
+}
+
 export async function fetchPipelineRuns(): Promise<PipelineRunItem[]> {
   const res = await fetch(`${API_URL}/api/v1/pipeline/runs`, {
     method: "GET",
