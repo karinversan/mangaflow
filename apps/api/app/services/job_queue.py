@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from app.core.config import settings
 from app.core.redis_client import get_redis
 
@@ -18,3 +20,7 @@ def pop_job(timeout_sec: int = 5) -> str | None:
 
 def queue_length() -> int:
     return int(get_redis().llen(settings.pipeline_queue_name))
+
+
+def enqueue_dead_letter(payload: dict) -> None:
+    get_redis().rpush(settings.pipeline_dead_letter_queue_name, json.dumps(payload, ensure_ascii=False))

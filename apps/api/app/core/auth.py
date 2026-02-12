@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -21,10 +22,37 @@ class AuthUser:
 
 
 def _decode_token(token: str) -> dict:
+    options = {"require": ["sub", "iat", "exp"]}
+    decode_kwargs: dict = {
+        "key": settings.jwt_secret,
+        "algorithms": [settings.jwt_algorithm],
+        "options": options,
+        "leeway": settings.jwt_leeway_sec,
+    }
+    if settings.jwt_issuer:
+        decode_kwargs["issuer"] = settings.jwt_issuer
+    if settings.jwt_audience:
+        decode_kwargs["audience"] = settings.jwt_audience
     try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        return jwt.decode(token, **decode_kwargs)
     except jwt.InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid JWT token.") from exc
+
+
+def create_access_token(sub: str, email: str | None = None) -> str:
+    now = datetime.now(timezone.utc)
+    payload: dict[str, object] = {
+        "sub": sub,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=settings.jwt_access_ttl_sec)).timestamp()),
+    }
+    if email:
+        payload["email"] = email
+    if settings.jwt_issuer:
+        payload["iss"] = settings.jwt_issuer
+    if settings.jwt_audience:
+        payload["aud"] = settings.jwt_audience
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def get_current_user(

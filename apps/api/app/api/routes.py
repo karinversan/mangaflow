@@ -4,15 +4,14 @@ import uuid
 from datetime import datetime, timezone
 from os.path import basename
 
-import jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 
-from app.core.auth import AuthUser, get_current_user
+from app.core.auth import AuthUser, create_access_token, get_current_user
 from app.core.config import settings
-from app.core.file_validation import validate_upload
+from app.core.file_validation import ALLOWED_CONTENT_TYPES, validate_upload
 from app.core.metrics import pipeline_errors_total, pipeline_requests_total
 from app.core.rate_limit import enforce_user_rate_limit
 from app.db.models import JobRun, Page, Project, Region
@@ -33,6 +32,7 @@ from app.services.pipeline_service import run_pipeline as run_pipeline_service
 from app.services.storage import build_input_key, key_exists, presign_get_url, presign_put_url, upload_bytes
 
 router = APIRouter()
+SUPPORTED_PROVIDERS = {"stub", "huggingface", "custom"}
 
 
 def utcnow() -> datetime:
@@ -77,6 +77,9 @@ async def presign_upload(
     content_type: str = Form("application/octet-stream"),
     current_user: AuthUser = Depends(get_current_user),
 ) -> PresignUploadResponse:
+    enforce_user_rate_limit(current_user.user_id, bucket="presign-upload", limit=120)
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Unsupported content type.")
     safe_name = file_name.replace("/", "_")
     key = f"input/{current_user.user_id}/uploads/{uuid.uuid4()}/{safe_name}"
     return PresignUploadResponse(
@@ -91,6 +94,7 @@ async def presign_download(
     key: str = Query(...),
     current_user: AuthUser = Depends(get_current_user),
 ) -> PresignDownloadResponse:
+    enforce_user_rate_limit(current_user.user_id, bucket="presign-download", limit=240)
     _enforce_key_access(current_user.user_id, key)
     if not key_exists(key):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found.")
@@ -105,10 +109,7 @@ async def presign_download(
 async def issue_dev_token(user_id: str = Form(...), email: str | None = Form(default=None)) -> dict[str, str]:
     if settings.api_env != "development":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
-    payload = {"sub": user_id}
-    if email:
-        payload["email"] = email
-    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    token = create_access_token(user_id, email)
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -127,7 +128,7 @@ async def create_pipeline_job(
     current_user: AuthUser = Depends(get_current_user),
 ) -> JobCreateResponse:
     pipeline_requests_total.inc()
-    enforce_user_rate_limit(current_user.user_id)
+    enforce_user_rate_limit(current_user.user_id, bucket="pipeline-jobs", limit=30)
 
     if file is None and not input_s3_key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide either file or input_s3_key.")
@@ -135,6 +136,10 @@ async def create_pipeline_job(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Use either file or input_s3_key, not both.")
 
     resolved_request_id = request_id or x_request_id or str(uuid.uuid4())
+    if len(resolved_request_id) > 128:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request_id is too long.")
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported provider.")
     existing_job = db.execute(
         select(JobRun).where(JobRun.owner_id == current_user.user_id, JobRun.request_id == resolved_request_id)
     ).scalar_one_or_none()
@@ -164,7 +169,7 @@ async def create_pipeline_job(
         else:
             assert file is not None
             raw = await file.read()
-            validate_upload(file.content_type, raw, settings.max_upload_mb)
+            validate_upload(file.content_type, raw, settings.max_upload_mb, settings.max_image_pixels)
             page = _create_page(
                 db,
                 project=project,
@@ -357,7 +362,9 @@ async def run_pipeline_legacy(
     provider: str = Form("stub"),
 ) -> PipelineResponse:
     raw = await file.read()
-    validate_upload(file.content_type, raw, settings.max_upload_mb)
+    validate_upload(file.content_type, raw, settings.max_upload_mb, settings.max_image_pixels)
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported provider.")
     try:
         return run_pipeline_service(raw, target_lang, provider)
     except Exception as exc:
@@ -366,11 +373,15 @@ async def run_pipeline_legacy(
 
 
 @router.get("/pipeline/runs", response_model=list[PipelineRunRead])
-async def list_runs(db: Session = Depends(get_db)) -> list[PipelineRunRead]:
+async def list_runs(
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+) -> list[PipelineRunRead]:
     rows = (
         db.execute(
             select(JobRun, Page)
             .join(Page, Page.id == JobRun.page_id)
+            .where(JobRun.owner_id == current_user.user_id)
             .order_by(JobRun.created_at.desc())
             .limit(100)
         )

@@ -27,3 +27,12 @@ def ensure_bucket_exists() -> None:
     existing = [item["Name"] for item in s3.list_buckets().get("Buckets", [])]
     if bucket not in existing:
         s3.create_bucket(Bucket=bucket)
+
+
+def check_s3_ready() -> bool:
+    try:
+        s3 = get_s3_client()
+        s3.head_bucket(Bucket=settings.s3_bucket)
+        return True
+    except Exception:
+        return False

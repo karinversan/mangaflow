@@ -197,9 +197,10 @@ export async function presignDownload(
   return (await res.json()) as { key: string; url: string; expires_in_sec: number };
 }
 
-export async function fetchPipelineRuns(): Promise<PipelineRunItem[]> {
+export async function fetchPipelineRuns(token?: string): Promise<PipelineRunItem[]> {
   const res = await fetch(`${API_URL}/api/v1/pipeline/runs`, {
     method: "GET",
+    headers: authHeaders(token),
     cache: "no-store"
   });
 

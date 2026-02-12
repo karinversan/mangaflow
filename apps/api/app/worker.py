@@ -7,11 +7,18 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.metrics import pipeline_errors_total, pipeline_job_duration_seconds, pipeline_jobs_running, pipeline_queue_length
+from app.core.metrics import (
+    pipeline_dead_letter_total,
+    pipeline_errors_total,
+    pipeline_job_duration_seconds,
+    pipeline_jobs_running,
+    pipeline_queue_length,
+    pipeline_retries_total,
+)
 from app.db.base import Base
 from app.db.models import JobRun, Region
 from app.db.session import SessionLocal, engine
-from app.services.job_queue import pop_job, queue_length
+from app.services.job_queue import enqueue_dead_letter, enqueue_job, pop_job, queue_length
 from app.services.pipeline_service import run_pipeline
 from app.services.storage import build_output_json_key, read_bytes, upload_json
 
@@ -94,11 +101,33 @@ def process_job(job_id: str) -> None:
         logger.exception("Worker failed job %s", job_id)
         job = db.get(JobRun, job_id)
         if job:
-            job.status = "failed"
-            job.error_message = str(exc)
-            job.finished_at = utcnow()
-            db.add(job)
-            db.commit()
+            if job.attempts < settings.pipeline_max_attempts:
+                job.status = "queued"
+                job.error_message = str(exc)
+                job.started_at = None
+                db.add(job)
+                db.commit()
+                pipeline_retries_total.inc()
+                enqueue_job(job.id)
+                logger.warning("Requeued job %s attempt=%s", job.id, job.attempts)
+            else:
+                job.status = "failed"
+                job.error_message = str(exc)
+                job.finished_at = utcnow()
+                db.add(job)
+                db.commit()
+                pipeline_dead_letter_total.inc()
+                enqueue_dead_letter(
+                    {
+                        "job_id": job.id,
+                        "owner_id": job.owner_id,
+                        "project_id": job.project_id,
+                        "page_id": job.page_id,
+                        "attempts": job.attempts,
+                        "error": str(exc),
+                        "failed_at": utcnow().isoformat(),
+                    }
+                )
     finally:
         elapsed = time.perf_counter() - started
         pipeline_job_duration_seconds.observe(elapsed)

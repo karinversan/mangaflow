@@ -2,15 +2,20 @@ import logging
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.routes import router
-from app.core.config import settings
+from app.core.config import settings, validate_runtime_settings
+from app.core.middleware import RequestContextMiddleware
 from app.core.metrics import render_metrics
-from app.core.s3_client import ensure_bucket_exists
+from app.core.redis_client import get_redis
+from app.core.s3_client import check_s3_ready, ensure_bucket_exists
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 app = FastAPI(
     title="Manga Translate API",
@@ -28,12 +33,14 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+app.add_middleware(RequestContextMiddleware)
 
 
 @app.on_event("startup")
 def init_db() -> None:
     import app.db.models  # noqa: F401
 
+    validate_runtime_settings()
     Base.metadata.create_all(bind=engine)
     try:
         ensure_bucket_exists()
@@ -44,6 +51,31 @@ def init_db() -> None:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.api_env}
+
+
+@app.get("/ready")
+async def ready():
+    checks = {"database": False, "redis": False, "s3": False}
+
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        checks["database"] = True
+    finally:
+        db.close()
+
+    redis_ok = bool(get_redis().ping())
+    checks["redis"] = redis_ok
+
+    checks["s3"] = check_s3_ready()
+
+    ok = all(checks.values())
+    if not ok:
+        return JSONResponse(
+            content={"status": "degraded", "checks": checks},
+            status_code=503,
+        )
+    return {"status": "ready", "checks": checks}
 
 
 @app.get("/metrics")
