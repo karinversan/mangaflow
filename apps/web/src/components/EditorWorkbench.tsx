@@ -8,8 +8,7 @@ import {
   fetchLastSession,
   fetchPageInput,
   issueDevToken,
-  patchRegion,
-  runPipeline
+  patchRegion
 } from "@/lib/api";
 import { DetectedRegion } from "@/lib/types";
 
@@ -383,6 +382,7 @@ export function EditorWorkbench() {
         setActivePageIndex(0);
         setDraftSourceText(mapped[0]?.source_text ?? "");
         setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+        setNotice("Сессия восстановлена из сервера.");
       } catch (error) {
         setNotice("Не удалось восстановить последнюю сессию.");
       } finally {
@@ -701,87 +701,79 @@ export function EditorWorkbench() {
     updateCurrentPage((page) => ({ ...page, pipeline_status: "running", pipeline_error: null }));
 
     try {
-      if (authToken) {
-        const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const created = await createPipelineJob(
-          {
-            file: currentPage.file,
-            targetLang,
-            provider: "stub",
-            requestId,
-            projectId: currentPage.project_id ?? undefined,
-            projectName: currentPage.file_name.replace(/\.[a-z0-9]+$/i, "")
-          },
-          authToken
-        );
+      if (!authToken) {
+        setNotice("API ещё не готова. Подождите пару секунд и попробуйте снова.");
+        updateCurrentPage((page) => ({ ...page, pipeline_status: "idle" }));
+        return;
+      }
 
-        let finalStatus: "done" | "failed" | null = null;
-        for (let attempt = 0; attempt < 90; attempt += 1) {
-          const status = await fetchPipelineJob(created.job_id, authToken);
-          if (status.status === "done" || status.status === "failed") {
-            finalStatus = status.status;
-            if (status.status === "failed") {
-              throw new Error(status.error_message || "Pipeline job failed");
-            }
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const created = await createPipelineJob(
+        {
+          file: currentPage.file,
+          targetLang,
+          provider: "stub",
+          requestId,
+          projectId: currentPage.project_id ?? undefined,
+          projectName: currentPage.file_name.replace(/\.[a-z0-9]+$/i, "")
+        },
+        authToken
+      );
 
-            const serverRegions = await fetchPageRegions(
-              { projectId: created.project_id, pageId: created.page_id },
-              authToken
-            );
-
-            const mapped = serverRegions.map((region) =>
-              toEditorRegion({
-                id: region.external_region_id,
-                x: region.x,
-                y: region.y,
-                width: region.width,
-                height: region.height,
-                source_text: region.source_text,
-                translated_text: region.translated_text,
-                confidence: region.confidence
-              })
-            );
-
-            const regionMap = serverRegions.reduce<Record<string, string>>((acc, region) => {
-              acc[region.external_region_id] = region.id;
-              return acc;
-            }, {});
-
-            updateCurrentPage((page) => ({
-              ...page,
-              project_id: created.project_id,
-              server_page_id: created.page_id,
-              region_id_map: regionMap,
-              regions: mapped,
-              selected_region_id: mapped[0]?.id ?? null,
-              pipeline_status: "done",
-              pipeline_error: null
-            }));
-            window.localStorage.setItem(
-              "mangaflow_last_session",
-              JSON.stringify({ project_id: created.project_id, page_id: created.page_id, file_name: currentPage.file_name })
-            );
-            setDraftSourceText(mapped[0]?.source_text ?? "");
-            setDraftTranslatedText(mapped[0]?.translated_text ?? "");
-            break;
+      let finalStatus: "done" | "failed" | null = null;
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        const status = await fetchPipelineJob(created.job_id, authToken);
+        if (status.status === "done" || status.status === "failed") {
+          finalStatus = status.status;
+          if (status.status === "failed") {
+            throw new Error(status.error_message || "Pipeline job failed");
           }
-          await sleep(900);
+
+          const serverRegions = await fetchPageRegions(
+            { projectId: created.project_id, pageId: created.page_id },
+            authToken
+          );
+
+          const mapped = serverRegions.map((region) =>
+            toEditorRegion({
+              id: region.external_region_id,
+              x: region.x,
+              y: region.y,
+              width: region.width,
+              height: region.height,
+              source_text: region.source_text,
+              translated_text: region.translated_text,
+              confidence: region.confidence
+            })
+          );
+
+          const regionMap = serverRegions.reduce<Record<string, string>>((acc, region) => {
+            acc[region.external_region_id] = region.id;
+            return acc;
+          }, {});
+
+          updateCurrentPage((page) => ({
+            ...page,
+            project_id: created.project_id,
+            server_page_id: created.page_id,
+            region_id_map: regionMap,
+            regions: mapped,
+            selected_region_id: mapped[0]?.id ?? null,
+            pipeline_status: "done",
+            pipeline_error: null
+          }));
+          window.localStorage.setItem(
+            "mangaflow_last_session",
+            JSON.stringify({ project_id: created.project_id, page_id: created.page_id, file_name: currentPage.file_name })
+          );
+          setDraftSourceText(mapped[0]?.source_text ?? "");
+          setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+          break;
         }
-        if (!finalStatus) {
-          throw new Error("Pipeline timeout");
-        }
-      } else {
-        const response = await runPipeline(currentPage.file, targetLang);
-        const mapped = response.regions.map(toEditorRegion);
-        updateCurrentPage((page) => ({
-          ...page,
-          regions: mapped,
-          selected_region_id: mapped[0]?.id ?? null,
-          pipeline_status: "done",
-          pipeline_error: null
-        }));
-        setDraftSourceText(mapped[0]?.source_text ?? "");
-        setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+        await sleep(900);
+      }
+      if (!finalStatus) {
+        throw new Error("Pipeline timeout");
       }
     } catch (e) {
       updateCurrentPage((page) => ({
@@ -1265,7 +1257,14 @@ export function EditorWorkbench() {
               <button className="rounded-lg bg-white/15 px-2 py-2" onClick={insertDraftToSelected}>Вставить</button>
               <button className="rounded-lg bg-white/15 px-2 py-2" onClick={translateCurrentDraft}>Перевести</button>
               <button className="rounded-lg bg-white/15 px-2 py-2" onClick={translateAll}>Перевести все</button>
-              <button className="rounded-lg bg-white/15 px-2 py-2" onClick={runPipelineForCurrent} disabled={currentPage.pipeline_status === "running"}>{currentPage.pipeline_status === "running" ? "Обработка..." : "Pipeline"}</button>
+              <button
+                className="rounded-lg bg-white/15 px-2 py-2"
+                onClick={runPipelineForCurrent}
+                disabled={currentPage.pipeline_status === "running" || !authToken}
+                title={!authToken ? "Ожидаем инициализацию API" : undefined}
+              >
+                {currentPage.pipeline_status === "running" ? "Обработка..." : !authToken ? "Инициализация..." : "Pipeline"}
+              </button>
             </div>
             <label className="flex items-center justify-between rounded-lg bg-[#121827] px-3 py-2"><span>Умная заливка</span><input type="checkbox" checked={smartFillEnabled} onChange={(e) => setSmartFillEnabled(e.target.checked)} /></label>
             <div className="grid grid-cols-2 gap-2">
