@@ -146,6 +146,24 @@ export function EditorWorkbench() {
   const workspaceWidth = imageMeta ? Math.round(imageMeta.width * (zoom / 100)) : 980;
   const workspaceHeight = imageMeta ? Math.round(imageMeta.height * (zoom / 100)) : 1400;
 
+  const summaryBadges = [
+    {
+      label: "QA Progress",
+      value: `${quality.progress}%`,
+      detail: `${quality.approved}/${quality.total} одобрено`
+    },
+    {
+      label: "Low-confidence",
+      value: `${quality.lowConfidence}`,
+      detail: "confidence < 0.9"
+    },
+    {
+      label: "Stored runs",
+      value: runs.length.toString(),
+      detail: "последние запросы"
+    }
+  ];
+
   const resetHistory = (nextRegions: EditorRegion[]) => {
     historyRef.current = [cloneRegions(nextRegions)];
     historyIndexRef.current = 0;
@@ -622,6 +640,18 @@ export function EditorWorkbench() {
 
   return (
     <section className="mx-auto w-full max-w-[1580px] px-4 pb-8">
+      <div className="mb-4 flex flex-wrap gap-3 text-white/85">
+        {summaryBadges.map((badge) => (
+          <article
+            key={badge.label}
+            className="flex min-w-[180px] flex-1 flex-col gap-1 rounded-2xl border border-white/10 bg-gradient-to-br from-[#121828] to-[#0d111c] p-3 shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
+          >
+            <p className="text-[10px] uppercase tracking-[0.4em] text-white/50">{badge.label}</p>
+            <p className="text-2xl font-semibold">{badge.value}</p>
+            <p className="text-xs text-white/70">{badge.detail}</p>
+          </article>
+        ))}
+      </div>
       <div ref={stageRef} className="relative h-[calc(100vh-250px)] min-h-[680px] overflow-hidden rounded-3xl bg-[#070a12]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(255,157,66,0.2),transparent_40%)]" />
 
