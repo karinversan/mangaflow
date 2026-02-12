@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,8 @@ from app.db.models import PipelineRun
 from app.db.session import get_db
 from app.schemas.pipeline import PipelineResponse, PipelineRunRead
 from app.services.pipeline_stub import run_stub_pipeline
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -20,6 +24,8 @@ async def run_pipeline(
     target_lang: str = Form("ru"),
     db: Session = Depends(get_db),
 ) -> PipelineResponse:
+    logger.info("Pipeline request from %s targeting %s", file.filename, target_lang)
+
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -48,8 +54,11 @@ async def run_pipeline(
         db.add(run)
         db.commit()
 
+        logger.info("Stored pipeline run %s with %d regions", run.id, run.region_count)
+
         return payload
     except Exception as exc:  # pragma: no cover
+        logger.exception("Pipeline execution failed")
         raise HTTPException(status_code=500, detail="Pipeline execution failed") from exc
 
 
