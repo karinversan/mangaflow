@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 import uuid
 from datetime import datetime, timezone
 from os.path import basename
@@ -7,7 +8,7 @@ from os.path import basename
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile, status
 
 from app.core.auth import AuthUser, create_access_token, get_current_user
 from app.core.config import settings
@@ -29,7 +30,7 @@ from app.schemas.pipeline import (
 )
 from app.services.job_queue import enqueue_job
 from app.services.pipeline_service import run_pipeline as run_pipeline_service
-from app.services.storage import build_input_key, key_exists, presign_get_url, presign_put_url, upload_bytes
+from app.services.storage import build_input_key, key_exists, presign_get_url, presign_put_url, read_bytes, upload_bytes
 
 router = APIRouter()
 SUPPORTED_PROVIDERS = {"stub", "huggingface", "custom"}
@@ -353,6 +354,30 @@ async def get_page_artifacts(
         if latest_job and latest_job.output_preview_s3_key
         else None,
     )
+
+
+@router.get("/projects/{project_id}/pages/{page_id}/input")
+async def get_page_input(
+    project_id: str,
+    page_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+) -> Response:
+    project = db.get(Project, project_id)
+    if not project or project.owner_id != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+
+    page = db.get(Page, page_id)
+    if not page or page.project_id != project.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found.")
+
+    _enforce_key_access(current_user.user_id, page.input_s3_key)
+    if not key_exists(page.input_s3_key):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Input object not found.")
+
+    payload = read_bytes(page.input_s3_key)
+    content_type = mimetypes.guess_type(page.file_name or "")[0] or "application/octet-stream"
+    return Response(content=payload, media_type=content_type)
 
 
 @router.post("/pipeline/run", response_model=PipelineResponse)

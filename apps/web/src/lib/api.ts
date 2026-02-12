@@ -159,6 +159,22 @@ export async function getPageArtifacts(
   return (await res.json()) as { input_url: string; output_json_url?: string | null; output_preview_url?: string | null };
 }
 
+export async function fetchPageInput(
+  params: { projectId: string; pageId: string },
+  token: string
+): Promise<Blob> {
+  const res = await fetch(`${API_URL}/api/v1/projects/${params.projectId}/pages/${params.pageId}/input`, {
+    method: "GET",
+    headers: authHeaders(token),
+    cache: "no-store"
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Failed to fetch page input");
+  }
+  return await res.blob();
+}
+
 export async function issueDevToken(userId: string, email?: string): Promise<string> {
   const form = new FormData();
   form.append("user_id", userId);

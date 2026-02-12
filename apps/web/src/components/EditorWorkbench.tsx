@@ -5,7 +5,7 @@ import {
   createPipelineJob,
   fetchPageRegions,
   fetchPipelineJob,
-  getPageArtifacts,
+  fetchPageInput,
   issueDevToken,
   patchRegion,
   runPipeline
@@ -319,13 +319,10 @@ export function EditorWorkbench() {
 
     const restore = async () => {
       try {
-        const artifacts = await getPageArtifacts(
+        const blob = await fetchPageInput(
           { projectId: session.project_id as string, pageId: session.page_id as string },
           authToken
         );
-        const imageRes = await fetch(artifacts.input_url);
-        if (!imageRes.ok) throw new Error("Failed to download image");
-        const blob = await imageRes.blob();
         const fileName = session.file_name || "restored.png";
         const file = new File([blob], fileName, { type: blob.type || "image/png" });
         const preview = await fileToDataURL(file);
