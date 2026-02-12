@@ -68,6 +68,6 @@ npm run dev
 `apps/api/app/services/providers.py` содержит контракт провайдера и текущий `StubProvider`.
 
 ## Production baseline
-- В `API_ENV=production` сервис валидирует runtime-настройки (`JWT_SECRET`, CORS, TTL signed URLs) и не стартует при небезопасной конфигурации.
+- В `API_ENV=production` сервис валидирует runtime-настройки (`JWT_SECRET`, CORS) и не стартует при небезопасной конфигурации.
 - `JWT_SECRET` должен быть >= 32 символов и не дефолтным.
 - Рекомендуется задавать `JWT_ISSUER` и `JWT_AUDIENCE` для строгой валидации токенов.

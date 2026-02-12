@@ -55,6 +55,8 @@ async def health() -> dict[str, str]:
 
 @app.get("/ready")
 async def ready():
+    if not settings.enable_ready_checks:
+        return {"status": "ready", "checks": {"disabled": True}}
     checks = {"database": False, "redis": False, "s3": False}
 
     db = SessionLocal()

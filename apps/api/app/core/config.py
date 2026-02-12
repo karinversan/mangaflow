@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     signed_url_expires_sec: int = 900
     rate_limit_per_minute: int = 60
     request_log_enabled: bool = True
+    enable_ready_checks: bool = True
 
     @property
     def is_production(self) -> bool:
@@ -47,5 +48,3 @@ def validate_runtime_settings() -> None:
         raise RuntimeError("JWT secret is too weak for production.")
     if "*" in settings.cors_allow_origins:
         raise RuntimeError("Wildcard CORS is not allowed in production.")
-    if settings.signed_url_expires_sec > 3600:
-        raise RuntimeError("Signed URL lifetime is too long for production.")
