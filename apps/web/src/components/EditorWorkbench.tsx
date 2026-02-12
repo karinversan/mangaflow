@@ -877,9 +877,9 @@ export function EditorWorkbench() {
     const element = stageRef.current;
     if (!element) return;
     const handler = (event: WheelEvent) => onStageWheel(event);
-    element.addEventListener("wheel", handler, { passive: false });
+    element.addEventListener("wheel", handler, { passive: false, capture: true });
     return () => {
-      element.removeEventListener("wheel", handler);
+      element.removeEventListener("wheel", handler, { capture: true } as EventListenerOptions);
     };
   }, [onStageWheel]);
 
@@ -1027,7 +1027,7 @@ export function EditorWorkbench() {
 
       <div
         ref={stageRef}
-        className="relative h-[calc(100vh-300px)] min-h-[420px] overflow-hidden rounded-2xl bg-[#0b1019]"
+        className="relative h-[calc(100vh-300px)] min-h-[420px] overflow-hidden rounded-2xl bg-[#0b1019] overscroll-contain"
       >
         <div
           className={`absolute inset-0 z-20 ${
