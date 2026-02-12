@@ -24,6 +24,10 @@ docker compose -f infra/docker-compose.yml up --build
 Frontend: http://localhost:3000
 API: http://localhost:8000/docs
 
+## Operations reference
+- Detailed DevOps/MLOps plan and local workflow are tracked in `docs/devops-mlops.md`.
+- Architecture, API contract, and scaling guidance live in `docs/architecture.md`.
+
 ## Локальный запуск без Docker
 ### API
 ```bash
