@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createPipelineJob,
   fetchPageRegions,
@@ -858,8 +858,9 @@ export function EditorWorkbench() {
     setPanOffset({ x: nextX, y: nextY });
   };
 
-  const onStageWheel = (event: WheelEvent<HTMLDivElement>) => {
+  const onStageWheel = (event: WheelEvent) => {
     event.preventDefault();
+    event.stopPropagation();
 
     const shouldZoom = effectiveToolMode === "zoom" || event.ctrlKey || event.metaKey;
     if (shouldZoom) {
@@ -871,6 +872,16 @@ export function EditorWorkbench() {
     const horizontalPreferred = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
     panByWheel(event.deltaX, event.deltaY, horizontalPreferred);
   };
+
+  useEffect(() => {
+    const element = stageRef.current;
+    if (!element) return;
+    const handler = (event: WheelEvent) => onStageWheel(event);
+    element.addEventListener("wheel", handler, { passive: false });
+    return () => {
+      element.removeEventListener("wheel", handler);
+    };
+  }, [onStageWheel]);
 
   const resetViewToDefault = () => {
     setZoomPercent(100);
@@ -1017,7 +1028,6 @@ export function EditorWorkbench() {
       <div
         ref={stageRef}
         className="relative h-[calc(100vh-300px)] min-h-[420px] overflow-hidden rounded-2xl bg-[#0b1019]"
-        onWheel={onStageWheel}
       >
         <div
           className={`absolute inset-0 z-20 ${
