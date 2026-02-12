@@ -5,8 +5,15 @@
 ## Что реализовано
 - Landing page с продуктовым позиционированием и архитектурой.
 - Editor page: загрузка изображения, запуск пайплайна, редактирование результатов, экспорт JSON.
-- Backend API (FastAPI): заглушка ML пайплайна (detect/inpaint/ocr/translate).
-- Базовый security baseline, DevOps и MLOps каркас.
+- Backend API (FastAPI):
+  - Асинхронные pipeline job'ы через Redis очередь (`POST /api/v1/pipeline/jobs`, `GET /api/v1/pipeline/jobs/{job_id}`).
+  - Worker (`python -m app.worker`) выполняет provider и сохраняет результат.
+  - Контракт провайдера (`PipelineProvider`: detect/inpaint/ocr/translate).
+  - Серверные сущности: `projects`, `pages`, `regions`, `job_runs`.
+  - Автосохранение правок региона: `PATCH /api/v1/projects/{project_id}/pages/{page_id}/regions/{region_id}`.
+  - Артефакты в MinIO (input/output ключи в БД + presigned URL).
+  - JWT auth для новых защищённых endpoint'ов, idempotency по `request_id`.
+  - Метрики Prometheus (`/metrics`) + rate limit + MIME/magic-bytes проверки.
 
 ## Стек
 - Frontend: Next.js 15, TypeScript, Tailwind CSS.
@@ -24,9 +31,14 @@ docker compose -f infra/docker-compose.yml up --build
 Frontend: http://localhost:3000
 API: http://localhost:8000/docs
 
-## Operations reference
-- Detailed DevOps/MLOps plan and local workflow are tracked in `docs/devops-mlops.md`.
-- Architecture, API contract, and scaling guidance live in `docs/architecture.md`.
+## API quick reference
+- `POST /api/v1/auth/dev-token` (dev only): получить JWT для локальной разработки.
+- `POST /api/v1/pipeline/jobs`: создать async job.
+- `GET /api/v1/pipeline/jobs/{job_id}`: получить статус/результат job.
+- `PATCH /api/v1/projects/{project_id}/pages/{page_id}/regions/{region_id}`: сохранить правку региона.
+- `GET /api/v1/projects/{project_id}/pages/{page_id}/artifacts`: получить presigned URL артефактов.
+- `POST /api/v1/pipeline/run`: legacy sync endpoint (совместимость).
+- `GET /metrics`: Prometheus метрики.
 
 ## Локальный запуск без Docker
 ### API
@@ -46,4 +58,4 @@ npm run dev
 ```
 
 ## Архитектура
-См. `/docs/architecture.md`, `/docs/security.md`, `/docs/devops-mlops.md`.
+`apps/api/app/services/providers.py` содержит контракт провайдера и текущий `StubProvider`.

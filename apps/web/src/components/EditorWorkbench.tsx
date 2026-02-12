@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
-import { runPipeline } from "@/lib/api";
+import {
+  createPipelineJob,
+  fetchPageRegions,
+  fetchPipelineJob,
+  issueDevToken,
+  patchRegion,
+  runPipeline
+} from "@/lib/api";
 import { DetectedRegion } from "@/lib/types";
 
 type ReviewStatus = "todo" | "edited" | "approved";
@@ -37,6 +44,9 @@ type PageDoc = {
   preview: string;
   image_meta: ImageMeta;
   regions: EditorRegion[];
+  project_id: string | null;
+  server_page_id: string | null;
+  region_id_map: Record<string, string>;
   selected_region_id: string | null;
   pipeline_status: "idle" | "running" | "done" | "error";
   pipeline_error: string | null;
@@ -219,9 +229,14 @@ function statusColor(status: ReviewStatus): string {
   return "#ff9d42";
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function EditorWorkbench() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const saveTimersRef = useRef<Record<string, number>>({});
 
   const [stageSize, setStageSize] = useState({ width: 1, height: 1 });
   const [pages, setPages] = useState<PageDoc[]>([]);
@@ -255,9 +270,26 @@ export function EditorWorkbench() {
   const [finishModalOpen, setFinishModalOpen] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [notice, setNotice] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   const currentPage = pages[activePageIndex] ?? null;
   const effectiveToolMode: ToolMode = isSpacePanning ? "pan" : toolMode;
+
+  useEffect(() => {
+    const initToken = async () => {
+      try {
+        const storageKey = "mangaflow_dev_user_id";
+        const existing = window.localStorage.getItem(storageKey);
+        const userId = existing || `dev-user-${Math.random().toString(36).slice(2, 10)}`;
+        if (!existing) window.localStorage.setItem(storageKey, userId);
+        const token = await issueDevToken(userId);
+        setAuthToken(token);
+      } catch {
+        setNotice("JWT dev-token недоступен. Работа в local-only режиме.");
+      }
+    };
+    void initToken();
+  }, []);
 
   const quality = useMemo(() => {
     if (!currentPage) return { total: 0, approved: 0, progress: 0 };
@@ -392,6 +424,17 @@ export function EditorWorkbench() {
     };
 
     const onMouseUp = () => {
+      if (regionDrag && currentPage) {
+        const region = currentPage.regions.find((item) => item.id === regionDrag.id);
+        if (region) {
+          scheduleRegionAutosave(currentPage, region.id, {
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height
+          });
+        }
+      }
       setPanelDrag(null);
       setRegionDrag(null);
       setPanDrag(null);
@@ -404,7 +447,7 @@ export function EditorWorkbench() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [panelDrag, regionDrag, panDrag, currentPage, activePageIndex, effectiveToolMode]);
+  }, [panelDrag, regionDrag, panDrag, currentPage, activePageIndex, effectiveToolMode, authToken]);
 
   useEffect(() => {
     const isTypingTarget = (target: EventTarget | null): boolean => {
@@ -449,7 +492,63 @@ export function EditorWorkbench() {
     setPages((current) => current.map((page, idx) => (idx === activePageIndex ? updater(page) : page)));
   };
 
+  const mapServerPatch = (patch: Partial<EditorRegion>) => {
+    const next: Partial<{
+      translated_text: string;
+      review_status: "todo" | "edited" | "approved";
+      note: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }> = {};
+    if (patch.translated_text !== undefined) next.translated_text = patch.translated_text;
+    if (patch.review_status !== undefined) next.review_status = patch.review_status;
+    if (patch.note !== undefined) next.note = patch.note;
+    if (patch.x !== undefined) next.x = patch.x;
+    if (patch.y !== undefined) next.y = patch.y;
+    if (patch.width !== undefined) next.width = patch.width;
+    if (patch.height !== undefined) next.height = patch.height;
+    return next;
+  };
+
+  const scheduleRegionAutosave = (
+    page: PageDoc,
+    regionId: string,
+    patch: Partial<{
+      translated_text: string;
+      review_status: "todo" | "edited" | "approved";
+      note: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>
+  ) => {
+    if (!authToken || !page.project_id || !page.server_page_id) return;
+    const serverRegionId = page.region_id_map[regionId];
+    if (!serverRegionId) return;
+    if (!Object.keys(patch).length) return;
+    const key = `${page.server_page_id}:${serverRegionId}`;
+    const existing = saveTimersRef.current[key];
+    if (existing) window.clearTimeout(existing);
+    saveTimersRef.current[key] = window.setTimeout(() => {
+      void patchRegion(
+        {
+          projectId: page.project_id as string,
+          pageId: page.server_page_id as string,
+          regionId: serverRegionId,
+          patch
+        },
+        authToken
+      ).catch(() => {
+        setNotice("Не удалось автосохранить часть правок.");
+      });
+    }, 350);
+  };
+
   const updateRegion = (id: string, patch: Partial<EditorRegion>) => {
+    const pageSnapshot = currentPage;
     updateCurrentPage((page) => ({
       ...page,
       regions: page.regions.map((region) => {
@@ -461,6 +560,7 @@ export function EditorWorkbench() {
         return next;
       })
     }));
+    if (pageSnapshot) scheduleRegionAutosave(pageSnapshot, id, mapServerPatch(patch));
   };
 
   const onPickFiles = async (filesList: FileList | null) => {
@@ -480,6 +580,9 @@ export function EditorWorkbench() {
         preview,
         image_meta,
         regions: [],
+        project_id: null,
+        server_page_id: null,
+        region_id_map: {},
         selected_region_id: null,
         pipeline_status: "idle",
         pipeline_error: null
@@ -496,18 +599,84 @@ export function EditorWorkbench() {
     updateCurrentPage((page) => ({ ...page, pipeline_status: "running", pipeline_error: null }));
 
     try {
-      const response = await runPipeline(currentPage.file, targetLang);
-      const mapped = response.regions.map(toEditorRegion);
-      updateCurrentPage((page) => ({
-        ...page,
-        regions: mapped,
-        selected_region_id: mapped[0]?.id ?? null,
-        pipeline_status: "done",
-        pipeline_error: null
-      }));
+      if (authToken) {
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const created = await createPipelineJob(
+          {
+            file: currentPage.file,
+            targetLang,
+            provider: "stub",
+            requestId,
+            projectId: currentPage.project_id ?? undefined,
+            projectName: currentPage.file_name.replace(/\.[a-z0-9]+$/i, "")
+          },
+          authToken
+        );
 
-      setDraftSourceText(mapped[0]?.source_text ?? "");
-      setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+        let finalStatus: "done" | "failed" | null = null;
+        for (let attempt = 0; attempt < 90; attempt += 1) {
+          const status = await fetchPipelineJob(created.job_id, authToken);
+          if (status.status === "done" || status.status === "failed") {
+            finalStatus = status.status;
+            if (status.status === "failed") {
+              throw new Error(status.error_message || "Pipeline job failed");
+            }
+
+            const serverRegions = await fetchPageRegions(
+              { projectId: created.project_id, pageId: created.page_id },
+              authToken
+            );
+
+            const mapped = serverRegions.map((region) =>
+              toEditorRegion({
+                id: region.external_region_id,
+                x: region.x,
+                y: region.y,
+                width: region.width,
+                height: region.height,
+                source_text: region.source_text,
+                translated_text: region.translated_text,
+                confidence: region.confidence
+              })
+            );
+
+            const regionMap = serverRegions.reduce<Record<string, string>>((acc, region) => {
+              acc[region.external_region_id] = region.id;
+              return acc;
+            }, {});
+
+            updateCurrentPage((page) => ({
+              ...page,
+              project_id: created.project_id,
+              server_page_id: created.page_id,
+              region_id_map: regionMap,
+              regions: mapped,
+              selected_region_id: mapped[0]?.id ?? null,
+              pipeline_status: "done",
+              pipeline_error: null
+            }));
+            setDraftSourceText(mapped[0]?.source_text ?? "");
+            setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+            break;
+          }
+          await sleep(900);
+        }
+        if (!finalStatus) {
+          throw new Error("Pipeline timeout");
+        }
+      } else {
+        const response = await runPipeline(currentPage.file, targetLang);
+        const mapped = response.regions.map(toEditorRegion);
+        updateCurrentPage((page) => ({
+          ...page,
+          regions: mapped,
+          selected_region_id: mapped[0]?.id ?? null,
+          pipeline_status: "done",
+          pipeline_error: null
+        }));
+        setDraftSourceText(mapped[0]?.source_text ?? "");
+        setDraftTranslatedText(mapped[0]?.translated_text ?? "");
+      }
     } catch (e) {
       updateCurrentPage((page) => ({
         ...page,

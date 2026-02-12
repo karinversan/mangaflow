@@ -29,6 +29,25 @@ services:
       - redis
       - minio
 
+  worker:
+    build:
+      context: ../apps/api
+    command: python -m app.worker
+    environment:
+      API_ENV: development
+      CORS_ALLOW_ORIGINS: http://localhost:3000
+      MAX_UPLOAD_MB: 25
+      DATABASE_URL: postgresql+psycopg2://app:app@postgres:5432/manga_translate
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: manga-pages
+    depends_on:
+      - postgres
+      - redis
+      - minio
+
   postgres:
     image: postgres:16-alpine
     environment:
