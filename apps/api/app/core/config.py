@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     pipeline_dead_letter_queue_name: str = "pipeline:jobs:dead-letter"
     pipeline_max_attempts: int = 3
     pipeline_job_timeout_sec: int = 120
+    pipeline_stale_running_sec: int = 180
     pipeline_retry_count: int = 2
     pipeline_circuit_failure_threshold: int = 5
     pipeline_circuit_reset_sec: int = 60
@@ -32,6 +33,22 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 60
     request_log_enabled: bool = True
     enable_ready_checks: bool = True
+    model_runtime_device: str = "auto"
+    detection_yolo_model_path: str = "models/best-3.pt"
+    detection_allowed_labels: str = "buble,bubble,text"
+    detection_conf_threshold: float = 0.25
+    detection_iou_threshold: float = 0.45
+    inpaint_bubble_expand_px: int = 8
+    inpaint_text_expand_px: int = 3
+    inpaint_bubble_scale: float = 1.03
+    inpaint_text_scale: float = 1.0
+    ocr_languages: str = "ja,en"
+    translation_model_id: str = "facebook/nllb-200-distilled-600M"
+    translation_source_lang: str = "jpn_Jpan"
+    translation_batch_size: int = 4
+    translation_max_input_length: int = 256
+    translation_max_output_length: int = 256
+    provider_registry_path: str = "providers.yaml"
 
     @property
     def is_production(self) -> bool:

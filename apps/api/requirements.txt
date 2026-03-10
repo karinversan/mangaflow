@@ -3,7 +3,8 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 pydantic==2.10.4
 pydantic-settings==2.7.0
-Pillow==11.1.0
+Pillow==9.5.0
+numpy==1.26.4
 orjson==3.10.13
 SQLAlchemy==2.0.36
 psycopg2-binary==2.9.10
@@ -11,3 +12,11 @@ redis==5.2.1
 boto3==1.36.25
 PyJWT==2.10.1
 prometheus-client==0.21.1
+PyYAML==6.0.2
+pytest==8.3.5
+torch==2.6.0
+transformers==4.49.0
+sentencepiece==0.2.0
+ultralytics==8.3.74
+easyocr==1.7.2
+simple-lama-inpainting==0.1.2

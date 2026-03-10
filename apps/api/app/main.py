@@ -4,6 +4,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.api.routes import router
 from app.core.config import settings, validate_runtime_settings
@@ -12,6 +13,7 @@ from app.core.metrics import render_metrics
 from app.core.redis_client import get_redis
 from app.core.s3_client import check_s3_ready, ensure_bucket_exists
 from app.db.base import Base
+from app.db.migrate import run_migrations
 from app.db.session import SessionLocal, engine
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,13 @@ def init_db() -> None:
     import app.db.models  # noqa: F401
 
     validate_runtime_settings()
-    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except IntegrityError:
+        # API and worker can start at the same time; retry after concurrent DDL race.
+        logger.warning("Concurrent metadata create_all detected, retrying.")
+        Base.metadata.create_all(bind=engine)
     try:
         ensure_bucket_exists()
     except Exception:  # pragma: no cover

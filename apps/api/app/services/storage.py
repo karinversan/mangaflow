@@ -22,6 +22,14 @@ def build_output_preview_key(owner_id: str, project_id: str, page_id: str, job_i
     return f"output/{owner_id}/{project_id}/{page_id}/{job_id}/preview.png"
 
 
+def build_output_mask_key(owner_id: str, project_id: str, page_id: str, job_id: str) -> str:
+    return f"output/{owner_id}/{project_id}/{page_id}/{job_id}/mask.png"
+
+
+def build_output_inpainted_key(owner_id: str, project_id: str, page_id: str, job_id: str) -> str:
+    return f"output/{owner_id}/{project_id}/{page_id}/{job_id}/inpainted.png"
+
+
 def upload_bytes(key: str, payload: bytes, content_type: str) -> None:
     client: BaseClient = get_s3_client()
     client.put_object(Bucket=settings.s3_bucket, Key=key, Body=payload, ContentType=content_type)

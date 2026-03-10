@@ -1,0 +1,30 @@
+defaults:
+  detector: custom
+  inpainter: custom
+  ocr: custom
+  translator: custom
+
+providers:
+  custom:
+    enabled: true
+    stages: [detector, inpainter, ocr, translator]
+    model: local-custom
+    version: v1
+    capabilities:
+      - polygon-mask
+      - local-model
+  stub:
+    enabled: true
+    stages: [detector, inpainter, ocr, translator]
+    model: deterministic-stub
+    version: v1
+    capabilities:
+      - fast
+      - offline
+  huggingface:
+    enabled: false
+    stages: [detector, inpainter, ocr, translator]
+    model: remote-hf
+    version: preview
+    capabilities:
+      - remote-model
