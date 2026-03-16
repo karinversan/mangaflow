@@ -992,8 +992,9 @@ async def detect_text_boxes(
         ]
         return DetectResponse(image_width=w, image_height=h, regions=regions)
     except Exception as exc:
+        logger.exception("Detection failed: %s", exc)
         pipeline_errors_total.inc()
-        raise HTTPException(status_code=500, detail="Detection failed.") from exc
+        raise HTTPException(status_code=500, detail=f"Detection failed: {exc}") from exc
 
 
 @router.post("/pipeline/ocr", response_model=OcrResponse)
