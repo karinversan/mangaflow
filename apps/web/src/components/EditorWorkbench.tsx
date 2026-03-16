@@ -730,11 +730,20 @@ export function EditorWorkbench() {
         <div className="h-4 w-px bg-white/20" />
         {/* Zoom */}
         <div className="flex items-center gap-1">
-          {(["select", "pan", "zoom"] as ToolMode[]).map(m => (
-            <button key={m} className={`rounded px-2 py-1 ${toolMode === m ? "bg-[#ff9d42] text-black" : "bg-white/10"}`} onClick={() => setToolMode(m)}>
-              {m === "select" ? "V" : m === "pan" ? "H" : "Z"}
+          {(["select", "pan", "zoom", "draw"] as ToolMode[]).map(m => (
+            <button key={m} className={`rounded px-2 py-1 ${toolMode === m ? "bg-[#ff9d42] text-black" : "bg-white/10"}`} onClick={() => { setToolMode(m); if (m !== "draw") setDrawingPoints([]); }}>
+              {m === "select" ? "V" : m === "pan" ? "H" : m === "zoom" ? "Z" : "D"}
             </button>
           ))}
+          {toolMode === "draw" && (
+            <>
+              <select className="rounded bg-[#141b2a] px-1.5 py-1 text-[10px]" value={drawLabel} onChange={e => setDrawLabel(e.target.value as "bubble" | "text")}>
+                <option value="bubble">bubble</option>
+                <option value="text">text</option>
+              </select>
+              {drawingPoints.length > 0 && <span className="text-[10px] text-white/50">{drawingPoints.length} pts · Enter/dbl-click = finish · Esc = cancel</span>}
+            </>
+          )}
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setZoomPercent(v => clamp(v - 10, 40, 600))}>-</button>
           <span className="w-10 text-center">{zoomPercent}%</span>
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setZoomPercent(v => clamp(v + 10, 40, 600))}>+</button>
