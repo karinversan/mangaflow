@@ -14,7 +14,6 @@
   <img src="https://img.shields.io/badge/Next.js-15-black" />
   <img src="https://img.shields.io/badge/FastAPI-0.115-green" />
   <img src="https://img.shields.io/badge/YOLO-v11--seg-orange" />
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey" />
 </p>
 
 ---
@@ -35,6 +34,29 @@
 - **Асинхронная обработка** через Redis очереди с retry-логикой и dead-letter queue
 - **Персистентность** — работа сохраняется между перезагрузками страницы
 - **Docker Compose** — запуск всего стека одной командой
+
+---
+
+## 🖼️ Интерфейс
+
+<!-- TODO: Скриншот лендинга -->
+<p align="center">
+  <img src="docs/screenshots/landing.png" alt="Лендинг MangaFlow" width="800" />
+</p>
+
+### Редактор
+
+<!-- TODO: Скриншот редактора с загруженной страницей и детектированными регионами -->
+<p align="center">
+  <img src="docs/screenshots/editor_detect.png" alt="Редактор — детекция текстовых областей" width="800" />
+</p>
+
+### Результат перевода
+
+<!-- TODO: Скриншот до/после — оригинал и переведённая страница рядом -->
+<p align="center">
+  <img src="docs/screenshots/before_after.png" alt="До и после перевода" width="800" />
+</p>
 
 ---
 
@@ -78,6 +100,11 @@
 - 5 классов: `bubble_text`, `narrative_text`, `background_text`, `meta_text`, `sfx`
 - Train / Val / Test split
 
+<!-- TODO: Примеры разметки — оригинал и наложение масок -->
+<p align="center">
+  <img src="docs/screenshots/dataset_annotations.png" alt="Примеры разметки датасета" width="700" />
+</p>
+
 **Метрики на тестовой выборке** (10 изображений, 160 аннотаций):
 
 | Метрика | Box | Mask |
@@ -112,6 +139,13 @@
 
 [SimpleLama](https://github.com/enesmsahin/simple-lama-inpainting) — обёртка над LaMa (Large Mask Inpainting). Удаляет текст с изображения, восстанавливая фон под текстовыми областями. Используются полигональные маски из стадии детекции.
 
+### Пример работы пайплайна
+
+<!-- TODO: 4 картинки в ряд — Original → Detect → Clean → Translated -->
+<p align="center">
+  <img src="docs/screenshots/pipeline_stages.png" alt="Стадии пайплайна" width="800" />
+</p>
+
 ---
 
 ## 🚀 Быстрый старт
@@ -119,8 +153,8 @@
 ### Docker Compose (рекомендуется)
 
 ```bash
-git clone https://github.com/karinversan/manga-translate-project.git
-cd manga-translate-project
+git clone https://github.com/karinversan/manga_translate_project.git
+cd manga_translate_project
 
 # Настройка
 cp .env.example .env
@@ -159,7 +193,7 @@ npm run dev
 ## 📁 Структура проекта
 
 ```
-manga-translate-project/
+manga_translate_project/
 ├── apps/
 │   ├── api/                    # FastAPI backend + ML pipeline
 │   │   ├── app/
@@ -195,67 +229,6 @@ manga-translate-project/
 
 ---
 
-## 🔧 API Endpoints
-
-### Pipeline (поэтапный)
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| `POST` | `/api/v1/pipeline/detect` | Детекция текстовых областей |
-| `POST` | `/api/v1/pipeline/ocr` | OCR распознавание |
-| `POST` | `/api/v1/pipeline/translate` | Перевод текстов |
-| `POST` | `/api/v1/pipeline/clean` | Инпейнтинг (очистка фона) |
-
-### Pipeline (полный цикл)
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| `POST` | `/api/v1/pipeline/jobs` | Создать задачу полного пайплайна |
-| `GET` | `/api/v1/pipeline/jobs/{id}` | Статус задачи |
-| `POST` | `/api/v1/pipeline/jobs/{id}/cancel` | Отмена задачи |
-
-### Проекты и сессии
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| `GET` | `/api/v1/projects/{id}/progress` | Прогресс проекта |
-| `GET` | `/api/v1/projects/{id}/export.zip` | Экспорт проекта |
-| `GET/POST` | `/api/v1/me/last-session` | Восстановление сессии |
-
----
-
-## 📊 Скрипты оценки
-
-```bash
-# Оценка сегментации (mAP, Dice, IoU)
-python scripts/evaluate_pipeline.py segment-eval \
-  --data-yaml manga_pipeline_notebooks/dataset/data_eval.yaml \
-  --model-path apps/api/models/best.pt \
-  --split test
-
-# Генерация OCR-разметки для ручной проверки
-python scripts/evaluate_pipeline.py ocr-label \
-  --images-dir manga_pipeline_notebooks/dataset/test/images \
-  --model-path apps/api/models/best.pt
-
-# Полный бенчмарк пайплайна
-python scripts/evaluate_pipeline.py full-benchmark \
-  --images-dir manga_pipeline_notebooks/dataset/test/images \
-  --model-path apps/api/models/best.pt \
-  --skip-translate
-```
-
----
-
-## 🔐 Безопасность
-
-- JWT-аутентификация на всех endpoint'ах проектов/задач
-- Проверка владельца при доступе к проектам/страницам/регионам
-- Валидация загрузок: MIME-тип, magic bytes, лимиты размера и пикселей
-- Rate limiting для чувствительных endpoint'ов
-
----
-
 ## 🗺️ Roadmap
 
 - [ ] Расширение датасета для улучшения детекции редких классов
@@ -264,15 +237,3 @@ python scripts/evaluate_pipeline.py full-benchmark \
 - [ ] Экспорт в PDF/EPUB
 - [ ] Kubernetes deployment
 - [ ] Distributed tracing (OpenTelemetry)
-
----
-
-## 📄 Лицензия
-
-MIT
-
----
-
-<p align="center">
-  <b>MangaFlow</b> — разработано как портфолио-проект для демонстрации full-stack ML pipeline.
-</p>
