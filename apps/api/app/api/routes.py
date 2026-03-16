@@ -12,6 +12,7 @@ from os.path import basename
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from PIL import Image
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile, status
 
 from app.core.auth import AuthUser, create_access_token, get_current_user
@@ -23,6 +24,9 @@ from app.db.models import JobEvent, JobOption, JobRun, Page, Project, Region, Us
 from app.db.session import get_db
 from app.schemas.pipeline import (
     ArtifactLinks,
+    CleanResponse,
+    DetectRegionPayload,
+    DetectResponse,
     JobCancelResponse,
     JobCreateResponse,
     JobEventRead,
@@ -32,6 +36,8 @@ from app.schemas.pipeline import (
     LastSessionUpsertResponse,
     MaskRegionPayload,
     MaskPreviewResponse,
+    OcrRequest,
+    OcrResponse,
     PipelineResponse,
     PipelineConfigPayload,
     PipelineRunRead,
@@ -49,9 +55,9 @@ from app.services.idempotency import runtime_signature
 from app.services.pipeline_orchestrator import resolve_pipeline_config
 from app.services.provider_registry import list_providers, provider_health
 from app.services.pipeline_service import preview_mask as preview_mask_service
-from app.services.pipeline_service import run_pipeline as run_pipeline_service
+from app.services.pipeline_service import get_provider, run_pipeline as run_pipeline_service
 from app.services.pipeline_service import translate_texts as translate_texts_service
-from app.services.providers import inpaint_with_mask_regions
+from app.services.providers import Detection, inpaint_with_mask_regions
 from app.services.storage import build_input_key, key_exists, presign_get_url, presign_put_url, read_bytes, upload_bytes
 
 router = APIRouter()
@@ -942,7 +948,7 @@ async def translate_texts(payload: TranslateRequest) -> TranslateResponse:
         return TranslateResponse(translated_texts=translated)
     except Exception as exc:
         pipeline_errors_total.inc()
-        raise HTTPException(status_code=500, detail="Translation failed.") from exc
+        raise HTTPException(status_code=500, detail=f"Translation failed: {exc}") from exc
 
 
 @router.post("/pipeline/run", response_model=PipelineResponse)
@@ -960,6 +966,84 @@ async def run_pipeline_legacy(
     except Exception as exc:
         pipeline_errors_total.inc()
         raise HTTPException(status_code=500, detail="Pipeline execution failed.") from exc
+
+
+@router.post("/pipeline/detect", response_model=DetectResponse)
+async def detect_text_boxes(
+    file: UploadFile = File(...),
+    provider: str = Form("custom"),
+) -> DetectResponse:
+    raw = await file.read()
+    validate_upload(file.content_type, raw, settings.max_upload_mb, settings.max_image_pixels)
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported provider.")
+    try:
+        prov = get_provider(provider)
+        with Image.open(io.BytesIO(raw)) as img:
+            w, h = img.size
+        detections = prov.detect(raw)
+        regions = [
+            DetectRegionPayload(
+                id=d.id, x=d.x, y=d.y, width=d.width, height=d.height,
+                confidence=d.confidence, label=d.label,
+                polygon=[{"x": pt["x"], "y": pt["y"]} for pt in d.polygon] if d.polygon else None,
+            )
+            for d in detections
+        ]
+        return DetectResponse(image_width=w, image_height=h, regions=regions)
+    except Exception as exc:
+        pipeline_errors_total.inc()
+        raise HTTPException(status_code=500, detail="Detection failed.") from exc
+
+
+@router.post("/pipeline/ocr", response_model=OcrResponse)
+async def run_ocr(
+    file: UploadFile = File(...),
+    regions_json: str = Form(...),
+    provider: str = Form("custom"),
+) -> OcrResponse:
+    raw = await file.read()
+    validate_upload(file.content_type, raw, settings.max_upload_mb, settings.max_image_pixels)
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported provider.")
+    try:
+        parsed_regions = json.loads(regions_json)
+        detections = [
+            Detection(
+                id=r["id"], x=r["x"], y=r["y"], width=r["width"], height=r["height"],
+                confidence=r.get("confidence", 0.9), label=r.get("label", "text"),
+            )
+            for r in parsed_regions
+        ]
+        prov = get_provider(provider)
+        texts = prov.ocr(raw, detections)
+        return OcrResponse(texts=texts)
+    except Exception as exc:
+        pipeline_errors_total.inc()
+        raise HTTPException(status_code=500, detail="OCR failed.") from exc
+
+
+@router.post("/pipeline/clean", response_model=CleanResponse)
+async def clean_image(
+    file: UploadFile = File(...),
+    regions_json: str = Form(...),
+    provider: str = Form("custom"),
+) -> CleanResponse:
+    import base64
+    raw = await file.read()
+    validate_upload(file.content_type, raw, settings.max_upload_mb, settings.max_image_pixels)
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported provider.")
+    try:
+        parsed_regions = json.loads(regions_json)
+        regions = [MaskRegionPayload.model_validate(item) for item in parsed_regions]
+        inpainted = inpaint_with_mask_regions(raw, regions)
+        if inpainted is None:
+            inpainted = raw
+        return CleanResponse(inpainted_b64=base64.b64encode(inpainted).decode("ascii"))
+    except Exception as exc:
+        pipeline_errors_total.inc()
+        raise HTTPException(status_code=500, detail="Cleaning failed.") from exc
 
 
 @router.get("/pipeline/runs", response_model=list[PipelineRunRead])
@@ -1050,3 +1134,18 @@ async def upsert_last_session(
     db.add(session)
     db.commit()
     return LastSessionUpsertResponse(ok=True)
+
+
+# ── local storage file serving (dev only) ─────────────────────────────────
+
+@router.get("/storage/{key:path}")
+async def serve_local_file(key: str):
+    """Serve files from local storage backend (development only)."""
+    if settings.storage_backend != "local":
+        raise HTTPException(status_code=404, detail="Not available in S3 mode.")
+    from pathlib import Path
+    file_path = Path(settings.local_storage_path) / key
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found.")
+    content_type, _ = mimetypes.guess_type(str(file_path))
+    return Response(content=file_path.read_bytes(), media_type=content_type or "application/octet-stream")
