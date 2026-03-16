@@ -22,3 +22,4 @@ dist/
 
 
 manga_pages
+apps/api/models/*.pt

@@ -1,11 +1,21 @@
 import type { NextConfig } from "next";
 
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+let apiOrigin = "http://localhost:8000";
+try {
+  apiOrigin = new URL(configuredApiUrl).origin;
+} catch {
+  apiOrigin = "http://localhost:8000";
+}
+
+const connectSrc = Array.from(new Set(["'self'", "http://localhost:8000", apiOrigin, "ws:", "wss:"])).join(" ");
+
 const csp = [
   "default-src 'self'",
   "img-src 'self' data: blob:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "connect-src 'self' http://localhost:8000 ws: wss:",
+  `connect-src ${connectSrc}`,
   "font-src 'self' data:",
   "frame-ancestors 'none'"
 ].join("; ");
@@ -13,6 +23,7 @@ const csp = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  output: "standalone",
   eslint: {
     ignoreDuringBuilds: true
   },

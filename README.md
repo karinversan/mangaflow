@@ -59,6 +59,18 @@ make up
 - Web: `http://localhost:3300/editor`
 - API docs: `http://localhost:8100/docs`
 
+## Docker Image Optimizations
+
+- API image no longer bakes `models/*.pt` into layer history.
+  - Models are mounted at runtime via compose volume: `../apps/api/models:/app/models:ro`.
+  - This keeps API/worker images much smaller and rebuilds faster.
+- Added per-service `.dockerignore`:
+  - `apps/api/.dockerignore` excludes tests, caches, local models.
+  - `apps/web/.dockerignore` excludes `.next`, `node_modules`, build artifacts.
+- Web image uses Next.js `output: "standalone"`:
+  - Runtime image contains only standalone server + static assets.
+  - No full development `node_modules` tree in final container.
+
 ## Make Targets
 
 - `make up` start stack in background
