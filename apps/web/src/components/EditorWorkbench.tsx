@@ -826,6 +826,15 @@ export function EditorWorkbench() {
               </svg>
             )}
 
+            {/* Drawing polygon in progress */}
+            {effectiveToolMode === "draw" && drawingPoints.length > 0 && (
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {drawingPoints.length >= 2 && <polyline points={drawingPoints.map(pt => `${pt.x},${pt.y}`).join(" ")} fill="none" stroke="#22d3ee" strokeWidth={0.25} strokeDasharray="0.6 0.3" />}
+                {drawingPoints.length >= 3 && <polygon points={drawingPoints.map(pt => `${pt.x},${pt.y}`).join(" ")} fill="rgba(34,211,238,0.15)" stroke="none" />}
+                {drawingPoints.map((pt, i) => <circle key={i} cx={pt.x} cy={pt.y} r={0.5} fill={i === 0 ? "#22d3ee" : "#fff"} stroke="#000" strokeWidth={0.12} />)}
+              </svg>
+            )}
+
             {/* Text regions */}
             {showRegions && filteredRegions.map(r => {
               const sel = r.id === currentPage.selected_region_id;
