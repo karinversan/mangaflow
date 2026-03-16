@@ -368,9 +368,12 @@ export function EditorWorkbench() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!isTyping(e.target)) {
         if (e.code === "Space") { e.preventDefault(); setIsSpacePanning(true); }
-        if (e.key.toLowerCase() === "v") setToolMode("select");
-        if (e.key.toLowerCase() === "h") setToolMode("pan");
-        if (e.key.toLowerCase() === "z") setToolMode("zoom");
+        if (e.key.toLowerCase() === "v") { setToolMode("select"); setDrawingPoints([]); }
+        if (e.key.toLowerCase() === "h") { setToolMode("pan"); setDrawingPoints([]); }
+        if (e.key.toLowerCase() === "z") { setToolMode("zoom"); setDrawingPoints([]); }
+        if (e.key.toLowerCase() === "d") setToolMode("draw");
+        if (e.key === "Escape" && drawingPoints.length > 0) { setDrawingPoints([]); }
+        if (e.key === "Enter" && drawingPoints.length >= 3) { finishDrawingPolygon(); }
         if (e.key === "Delete" || e.key === "Backspace") {
           setPages(cur => cur.map((p, i) => {
             if (i !== activePageIndex) return p;
@@ -389,7 +392,7 @@ export function EditorWorkbench() {
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") { setIsSpacePanning(false); setPanDrag(null); } };
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
-  }, []);
+  }, [drawingPoints, finishDrawingPolygon]);
 
   useEffect(() => { setPanOffset({ x: 0, y: 0 }); }, [currentPage?.id]);
 
