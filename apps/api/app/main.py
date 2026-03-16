@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,10 +51,14 @@ def init_db() -> None:
         # API and worker can start at the same time; retry after concurrent DDL race.
         logger.warning("Concurrent metadata create_all detected, retrying.")
         Base.metadata.create_all(bind=engine)
-    try:
-        ensure_bucket_exists()
-    except Exception:  # pragma: no cover
-        logger.exception("Failed to ensure S3 bucket exists on startup.")
+    if settings.storage_backend == "s3":
+        try:
+            ensure_bucket_exists()
+        except Exception:  # pragma: no cover
+            logger.exception("Failed to ensure S3 bucket exists on startup.")
+    else:
+        Path(settings.local_storage_path).mkdir(parents=True, exist_ok=True)
+        logger.info("Using local filesystem storage at %s", settings.local_storage_path)
 
 
 @app.get("/health")
@@ -77,7 +82,10 @@ async def ready():
     redis_ok = bool(get_redis().ping())
     checks["redis"] = redis_ok
 
-    checks["s3"] = check_s3_ready()
+    if settings.storage_backend == "s3":
+        checks["s3"] = check_s3_ready()
+    else:
+        checks["s3"] = Path(settings.local_storage_path).is_dir()
 
     ok = all(checks.values())
     if not ok:

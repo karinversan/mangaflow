@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     jwt_audience: str | None = None
     jwt_access_ttl_sec: int = 3600
     jwt_leeway_sec: int = 30
+    storage_backend: str = "local"  # "local" for dev, "s3" for production
+    local_storage_path: str = ".storage"
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
     request_log_enabled: bool = True
     enable_ready_checks: bool = True
     model_runtime_device: str = "auto"
-    detection_yolo_model_path: str = "models/best-3.pt"
+    detection_yolo_model_path: str = "models/yolo26s-seg.pt"
     detection_allowed_labels: str = "buble,bubble,text"
     detection_conf_threshold: float = 0.25
     detection_iou_threshold: float = 0.45
@@ -48,6 +50,9 @@ class Settings(BaseSettings):
     translation_batch_size: int = 4
     translation_max_input_length: int = 256
     translation_max_output_length: int = 256
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openrouter/hunter-alpha"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
     provider_registry_path: str = "providers.yaml"
 
     @property
