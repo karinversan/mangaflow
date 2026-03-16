@@ -1,150 +1,278 @@
-# Manga Translate Studio
+<p align="center">
+  <img src="apps/web/public/logo.svg" alt="MangaFlow" width="80" />
+</p>
 
-Portfolio-sized comic translation system with persistent projects, async pipeline jobs, pluggable model providers, and a browser editor.
+<h1 align="center">MangaFlow</h1>
 
-## Architecture
+<p align="center">
+  Платформа для автоматизированного перевода манги с японского на другие языки.<br/>
+  Детекция текстовых областей, OCR, машинный перевод, инпейнтинг и ручная редактура — в одном инструменте.
+</p>
 
-```mermaid
-flowchart LR
-  WEB["Next.js Editor"] --> API["FastAPI API"]
-  API --> PG["Postgres"]
-  API --> RQ["Redis Queue"]
-  API --> S3["MinIO (artifacts)"]
-  RQ --> WK["Pipeline Worker"]
-  WK --> PG
-  WK --> S3
-  WK --> MODELS["Detector/OCR/Translator/Inpainter Providers"]
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.12-blue" />
+  <img src="https://img.shields.io/badge/Next.js-15-black" />
+  <img src="https://img.shields.io/badge/FastAPI-0.115-green" />
+  <img src="https://img.shields.io/badge/YOLO-v11--seg-orange" />
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey" />
+</p>
+
+---
+
+## 📖 О проекте
+
+**MangaFlow** — веб-приложение для перевода манги, построенное как end-to-end ML-пайплайн: от загрузки страницы до экспорта переведённого изображения. Проект сочетает кастомную YOLO-модель для сегментации текстовых областей, MangaOCR для распознавания японского текста, LLM-перевод через OpenRouter и SimpleLama для инпейнтинга (удаления текста с фона).
+
+### Мотивация
+
+Существующие инструменты перевода манги (например, [comic-translate](https://github.com/ogkalu2/comic-translate)) — десктопные приложения. MangaFlow — это **веб-платформа** с пошаговым пайплайном, редактором полигонов, асинхронными очередями и персистентностью сессий, ориентированная на удобство и масштабируемость.
+
+### Ключевые особенности
+
+- **5-стадийный пайплайн**: Detect → OCR → Translate → Clean → Render
+- **Кастомная YOLO-модель** (YOLOv11s-seg), обученная на самостоятельно размеченном датасете манги
+- **Интерактивный редактор** с возможностью двигать точки полигонов, удалять регионы, корректировать перевод
+- **Асинхронная обработка** через Redis очереди с retry-логикой и dead-letter queue
+- **Персистентность** — работа сохраняется между перезагрузками страницы
+- **Docker Compose** — запуск всего стека одной командой
+
+---
+
+## 🏗️ Архитектура
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
+│   Next.js 15    │────▶│   FastAPI API     │────▶│  PostgreSQL │
+│   React 19      │     │   + Worker        │     └─────────────┘
+│   Tailwind CSS  │     │                   │────▶┌─────────────┐
+└─────────────────┘     │   Python 3.12     │     │    Redis     │
+                        │                   │────▶└─────────────┘
+                        │   ML Models:      │────▶┌─────────────┐
+                        │   YOLO, MangaOCR, │     │    MinIO     │
+                        │   SimpleLama,     │     │  (artifacts) │
+                        │   OpenRouter LLM  │     └─────────────┘
+                        └──────────────────┘
 ```
 
-- API endpoints create/read/cancel jobs and persist project/page/session metadata.
-- Worker consumes Redis queue, runs stage-based orchestrator, writes artifacts to MinIO, updates DB.
-- Editor restores last session and region state after refresh.
+### Стек технологий
 
-## Core Features
+| Слой | Технологии |
+|------|-----------|
+| **Frontend** | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| **Backend** | FastAPI, SQLAlchemy, Pydantic v2, Uvicorn |
+| **ML / AI** | YOLOv11s-seg (ultralytics), MangaOCR, SimpleLama, OpenRouter API |
+| **Инфраструктура** | Docker Compose, PostgreSQL 15, Redis 7, MinIO |
+| **Мониторинг** | Prometheus metrics (`/metrics`), structured logging |
 
-- Persistent sessions:
-  - `GET /api/v1/me/last-session`
-  - `POST /api/v1/me/last-session`
-- Async pipeline:
-  - queued/running/retrying/done/failed/canceled statuses
-  - retries + dead-letter
-  - stale running recovery on worker startup
-  - cancel endpoint (`POST /api/v1/pipeline/jobs/{id}/cancel`)
-- Provider plugin model:
-  - registry in `apps/api/providers.yaml`
-  - stage config per job: detector/inpainter/ocr/translator
-  - provider health endpoint: `GET /api/v1/providers`
-- Batch workflow:
-  - queue all pages from editor
-  - project progress endpoint: `GET /api/v1/projects/{project_id}/progress`
-- Exports:
-  - server ZIP export: `GET /api/v1/projects/{project_id}/export.zip`
-  - includes images + metadata JSON with provider/model/version per stage
+---
 
-## Repository Layout
+## 🤖 ML-пайплайн
 
-- `/apps/api` FastAPI app + worker
-- `/apps/web` Next.js editor
-- `/infra/docker-compose.yml` local stack
+### 1. Детекция текстовых областей (YOLO Segmentation)
 
-## Local Run
+Используется модель **YOLOv11s-seg** (10.4M параметров, 34.1 GFLOPs), дообученная на кастомном датасете.
+
+**Датасет**:
+- Собран с [Roboflow](https://universe.roboflow.com/test-4au37/manga_transl/dataset/1)
+- **Разметка выполнена вручную** — полигональная сегментация текстовых областей
+- 5 классов: `bubble_text`, `narrative_text`, `background_text`, `meta_text`, `sfx`
+- Train / Val / Test split
+
+**Метрики на тестовой выборке** (10 изображений, 160 аннотаций):
+
+| Метрика | Box | Mask |
+|---------|-----|------|
+| **mAP@50** | 0.374 | 0.394 |
+| **mAP@50-95** | 0.285 | 0.264 |
+| **Precision** | 0.450 | 0.453 |
+| **Recall** | 0.290 | 0.299 |
+
+**Pixel-level метрики (Dice / IoU)**:
+
+| Класс | Dice | IoU | Изображений |
+|-------|------|-----|-------------|
+| bubble_text | **0.784** | **0.667** | 8 |
+| sfx | 0.385 | 0.319 | 8 |
+| background_text | 0.023 | 0.012 | 5 |
+| meta_text | 0.010 | 0.005 | 4 |
+| narration_text | 0.000 | 0.000 | 2 |
+| **Среднее** | **0.240** | **0.200** | — |
+
+> **Примечание**: Модель хорошо справляется с основным классом `bubble_text` (Dice 0.78). Низкие показатели редких классов (`meta_text`, `narration_text`) связаны с малым количеством примеров в тестовой выборке и дисбалансом классов. Дальнейшее улучшение возможно за счёт расширения датасета.
+
+### 2. OCR (MangaOCR)
+
+[MangaOCR](https://github.com/kha-white/manga-ocr) — модель на базе Vision Encoder-Decoder, специализированная на распознавании японского текста в манге. Работает без внешних API, полностью локально.
+
+### 3. Перевод (OpenRouter LLM)
+
+Перевод выполняется через [OpenRouter API](https://openrouter.ai/) с использованием LLM-модели. По умолчанию используется `openrouter/hunter-alpha`. Поддерживаемые языки: русский, английский, испанский, корейский, китайский и другие.
+
+### 4. Инпейнтинг (SimpleLama)
+
+[SimpleLama](https://github.com/enesmsahin/simple-lama-inpainting) — обёртка над LaMa (Large Mask Inpainting). Удаляет текст с изображения, восстанавливая фон под текстовыми областями. Используются полигональные маски из стадии детекции.
+
+---
+
+## 🚀 Быстрый старт
+
+### Docker Compose (рекомендуется)
 
 ```bash
+git clone https://github.com/karinversan/manga-translate-project.git
+cd manga-translate-project
+
+# Настройка
 cp .env.example .env
+# Отредактируйте .env — укажите OPENROUTER_API_KEY
+
+# Поместите модель
 mkdir -p apps/api/models
-cp ~/Downloads/best-3.pt apps/api/models/best-3.pt
-make up
+cp ~/Downloads/best.pt apps/api/models/best.pt
+
+# Запуск
+docker compose -f infra/docker-compose.yml up -d
 ```
 
-- Web: `http://localhost:3300/editor`
-- API docs: `http://localhost:8100/docs`
+- 🌐 Web: http://localhost:3300
+- 📖 API docs: http://localhost:8100/docs
 
-## Docker Image Optimizations
+### Локальная разработка (без Docker)
 
-- API image no longer bakes `models/*.pt` into layer history.
-  - Models are mounted at runtime via compose volume: `../apps/api/models:/app/models:ro`.
-  - This keeps API/worker images much smaller and rebuilds faster.
-- Added per-service `.dockerignore`:
-  - `apps/api/.dockerignore` excludes tests, caches, local models.
-  - `apps/web/.dockerignore` excludes `.next`, `node_modules`, build artifacts.
-- Web image uses Next.js `output: "standalone"`:
-  - Runtime image contains only standalone server + static assets.
-  - No full development `node_modules` tree in final container.
+```bash
+# Backend
+cd apps/api
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install --no-deps simple-lama-inpainting==0.1.2
+OPENROUTER_API_KEY="your-key" python -m uvicorn app.main:app --reload --port 8000
 
-## Make Targets
+# Frontend (в другом терминале)
+cd apps/web
+npm install
+npm run dev
+```
 
-- `make up` start stack in background
-- `make down` stop stack
-- `make logs` tail logs
-- `make migrate` apply DB migrations
-- `make seed` seed demo data
-- `make test` run API tests
+---
 
-## API Highlights
+## 📁 Структура проекта
 
-- Jobs:
-  - `POST /api/v1/pipeline/jobs`
-  - `GET /api/v1/pipeline/jobs/{job_id}`
-  - `POST /api/v1/pipeline/jobs/{job_id}/cancel`
-  - `GET /api/v1/pipeline/jobs/{job_id}/events`
-- Projects:
-  - `GET /api/v1/projects/{project_id}/progress`
-  - `GET /api/v1/projects/{project_id}/export.zip`
-  - `GET /api/v1/projects/{project_id}/pages/{page_id}/regions`
-  - `PATCH /api/v1/projects/{project_id}/pages/{page_id}/regions/{region_id}`
-- Providers:
-  - `GET /api/v1/providers`
-- Session:
-  - `GET /api/v1/me/last-session`
-  - `POST /api/v1/me/last-session`
+```
+manga-translate-project/
+├── apps/
+│   ├── api/                    # FastAPI backend + ML pipeline
+│   │   ├── app/
+│   │   │   ├── api/routes.py   # API endpoints
+│   │   │   ├── core/config.py  # Настройки (Pydantic Settings)
+│   │   │   ├── services/
+│   │   │   │   ├── providers.py        # ML-провайдеры (YOLO, OCR, LLM, Lama)
+│   │   │   │   ├── pipeline_service.py # Оркестрация пайплайна
+│   │   │   │   └── job_queue.py        # Redis очередь
+│   │   │   └── db/             # SQLAlchemy модели
+│   │   ├── models/             # YOLO .pt веса (не в git)
+│   │   └── requirements.txt
+│   └── web/                    # Next.js frontend
+│       └── src/
+│           ├── app/
+│           │   ├── page.tsx            # Лендинг
+│           │   └── editor/page.tsx     # Страница редактора
+│           ├── components/
+│           │   └── EditorWorkbench.tsx  # Основной компонент редактора
+│           └── lib/
+│               ├── api.ts              # API клиент
+│               └── types.ts            # TypeScript типы
+├── infra/
+│   └── docker-compose.yml      # Полный стек
+├── scripts/
+│   ├── evaluate_pipeline.py    # Скрипт оценки моделей
+│   └── reports/                # JSON-отчёты с метриками
+├── manga_pipeline_notebooks/
+│   └── dataset/                # YOLO-датасет (Roboflow)
+├── .env.example
+└── README.md
+```
 
-## Adding a Custom Provider
+---
 
-1. Register provider metadata in `apps/api/providers.yaml`:
-   - `enabled`
-   - supported `stages`
-   - default `model`/`version`
-   - `capabilities`
-2. Implement stage logic in `apps/api/app/services/pipeline_orchestrator.py` adapter layer:
-   - `DetectorProvider.detect`
-   - `InpainterProvider.inpaint`
-   - `OcrProvider.ocr`
-   - `TranslatorProvider.translate`
-3. Expose provider name in selector UI (`EditorWorkbench` pipeline config panel).
+## 🔧 API Endpoints
 
-## Observability
+### Pipeline (поэтапный)
 
-- Metrics: `/metrics`
-  - queue length
-  - running jobs
-  - retry/dead-letter counters
-  - stage duration and failures by provider
-- Structured worker logs include:
-  - `job_id`, `project_id`, `request_id`, `provider`
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `POST` | `/api/v1/pipeline/detect` | Детекция текстовых областей |
+| `POST` | `/api/v1/pipeline/ocr` | OCR распознавание |
+| `POST` | `/api/v1/pipeline/translate` | Перевод текстов |
+| `POST` | `/api/v1/pipeline/clean` | Инпейнтинг (очистка фона) |
 
-## Security Baseline
+### Pipeline (полный цикл)
 
-- JWT auth on project/job/session endpoints.
-- Project ownership checks on all project/page/region access.
-- Upload validation:
-  - MIME type
-  - magic bytes
-  - size and pixel limits
-- Rate limiting for sensitive endpoints.
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `POST` | `/api/v1/pipeline/jobs` | Создать задачу полного пайплайна |
+| `GET` | `/api/v1/pipeline/jobs/{id}` | Статус задачи |
+| `POST` | `/api/v1/pipeline/jobs/{id}/cancel` | Отмена задачи |
 
-## Troubleshooting
+### Проекты и сессии
 
-- `Pipeline provider circuit is open`:
-  - wait for reset window (`PIPELINE_CIRCUIT_RESET_SEC`) or reduce failing requests.
-- first custom translation is slow:
-  - NLLB model warm-up can take minutes on first run.
-- no output preview:
-  - verify worker logs and `output_*_s3_key` in job status.
-- session not restoring:
-  - confirm `POST /me/last-session` succeeds (JWT + owner access).
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/projects/{id}/progress` | Прогресс проекта |
+| `GET` | `/api/v1/projects/{id}/export.zip` | Экспорт проекта |
+| `GET/POST` | `/api/v1/me/last-session` | Восстановление сессии |
 
-## Non-goals (current iteration)
+---
 
-- No Kubernetes
-- No distributed tracing stack
-- No full EPUB/PDF production pipeline (ZIP export only)
+## 📊 Скрипты оценки
+
+```bash
+# Оценка сегментации (mAP, Dice, IoU)
+python scripts/evaluate_pipeline.py segment-eval \
+  --data-yaml manga_pipeline_notebooks/dataset/data_eval.yaml \
+  --model-path apps/api/models/best.pt \
+  --split test
+
+# Генерация OCR-разметки для ручной проверки
+python scripts/evaluate_pipeline.py ocr-label \
+  --images-dir manga_pipeline_notebooks/dataset/test/images \
+  --model-path apps/api/models/best.pt
+
+# Полный бенчмарк пайплайна
+python scripts/evaluate_pipeline.py full-benchmark \
+  --images-dir manga_pipeline_notebooks/dataset/test/images \
+  --model-path apps/api/models/best.pt \
+  --skip-translate
+```
+
+---
+
+## 🔐 Безопасность
+
+- JWT-аутентификация на всех endpoint'ах проектов/задач
+- Проверка владельца при доступе к проектам/страницам/регионам
+- Валидация загрузок: MIME-тип, magic bytes, лимиты размера и пикселей
+- Rate limiting для чувствительных endpoint'ов
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Расширение датасета для улучшения детекции редких классов
+- [ ] Fine-tuning MangaOCR на вертикальном тексте
+- [ ] Поддержка пакетной обработки (несколько страниц)
+- [ ] Экспорт в PDF/EPUB
+- [ ] Kubernetes deployment
+- [ ] Distributed tracing (OpenTelemetry)
+
+---
+
+## 📄 Лицензия
+
+MIT
+
+---
+
+<p align="center">
+  <b>MangaFlow</b> — разработано как портфолио-проект для демонстрации full-stack ML pipeline.
+</p>
