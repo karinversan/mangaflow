@@ -7,6 +7,7 @@ __pycache__/
 *.pyo
 .venv/
 .pytest_cache/
+*.egg-info/
 
 # Node
 node_modules/
@@ -15,11 +16,33 @@ dist/
 
 # Env
 .env
+.env.local
 
 # IDE
 .vscode/
 .idea/
 
-
-manga_pages
+# ML Models / Weights
 apps/api/models/*.pt
+apps/api/models/*.onnx
+*.pt
+*.onnx
+*.safetensors
+
+# Dataset (large files)
+manga_pipeline_notebooks/dataset/train/
+manga_pipeline_notebooks/dataset/valid/
+manga_pipeline_notebooks/dataset/test/
+manga_pipeline_notebooks/*.ipynb_checkpoints/
+
+# Storage / Artifacts
+apps/api/.storage/
+manga_pages/
+
+# YOLO runs
+runs/
+
+# Misc
+*.log
+*.sqlite3
+manga_translate.db
