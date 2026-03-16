@@ -320,6 +320,40 @@ export function EditorWorkbench() {
   useEffect(() => { if (!selectedRegion) return; setDraftSourceText(selectedRegion.source_text); setDraftTranslatedText(selectedRegion.translated_text); }, [selectedRegion?.id]);
 
   // ---------------------------------------------------------------------------
+  // Polygon drawing
+  // ---------------------------------------------------------------------------
+  const finishDrawingPolygon = useCallback(() => {
+    if (drawingPoints.length < 3) { setDrawingPoints([]); return; }
+    const poly = normalizePolygon(drawingPoints);
+    if (!poly) { setDrawingPoints([]); return; }
+    const xs = poly.map(p => p.x), ys = poly.map(p => p.y);
+    const x = Math.min(...xs), y = Math.min(...ys);
+    const width = Math.max(...xs) - x, height = Math.max(...ys) - y;
+    const newRegion: MaskRegion = {
+      id: `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: drawLabel,
+      x: Number(x.toFixed(3)), y: Number(y.toFixed(3)),
+      width: Number(width.toFixed(3)), height: Number(height.toFixed(3)),
+      confidence: 1,
+      polygon: poly,
+    };
+    setPages(cur => cur.map((p, i) => {
+      if (i !== activePageIndex) return p;
+      return {
+        ...p,
+        mask_regions: [...p.mask_regions, newRegion],
+        detect_regions: [...p.detect_regions, { id: newRegion.id, label: drawLabel, x: newRegion.x, y: newRegion.y, width: newRegion.width, height: newRegion.height, confidence: 1, polygon: poly }],
+        selected_mask_region_id: newRegion.id,
+      };
+    }));
+    setShowMaskPreview(true);
+    setDrawingPoints([]);
+    setNotice("Полигон создан.");
+  }, [drawingPoints, drawLabel, activePageIndex]);
+
+  const cancelDrawing = useCallback(() => { setDrawingPoints([]); }, []);
+
+  // ---------------------------------------------------------------------------
   // Resize observer + keyboard
   // ---------------------------------------------------------------------------
   useEffect(() => {
