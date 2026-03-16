@@ -209,6 +209,10 @@ export function EditorWorkbench() {
   const [panDrag, setPanDrag] = useState<PanDragState | null>(null);
   const [vertexDrag, setVertexDrag] = useState<{ regionId: string; vertexIndex: number; startClientX: number; startClientY: number; startPtX: number; startPtY: number; displayWidth: number; displayHeight: number } | null>(null);
 
+  // Polygon drawing state
+  const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
+  const [drawLabel, setDrawLabel] = useState<"bubble" | "text">("text");
+
   // Modals & notices
   const [finishModalOpen, setFinishModalOpen] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
