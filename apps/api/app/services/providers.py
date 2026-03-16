@@ -62,8 +62,13 @@ _lama_model: Any = None
 # Map YOLO class names to our internal labels
 YOLO_CLASS_MAP: dict[str, str] = {
     "bubble_text": "bubble",
+    "buble_text": "bubble",
+    "narrative_text": "text",
+    "narration_text": "text",
+    "background_text": "text",
+    "meta_text": "text",
+    "sfx": "sfx",
     "nonbubble_text": "text",
-    "sfx": "text",
     "bubble": "bubble",
     "buble": "bubble",
     "text": "text",
