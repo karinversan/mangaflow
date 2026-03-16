@@ -1,6 +1,10 @@
 import {
+  CleanResponse,
+  DetectRegion,
+  DetectResponse,
   MaskPreviewResponse,
   MaskRegion,
+  OcrResponse,
   PipelineConfig,
   PipelineJobCreateResponse,
   PipelineJobStatus,
@@ -422,4 +426,66 @@ export async function exportProjectZip(projectId: string, token: string): Promis
     throw new Error(detail || "Failed to export project zip");
   }
   return await res.blob();
+}
+
+// ---------------------------------------------------------------------------
+// Per-stage API functions
+// ---------------------------------------------------------------------------
+
+export async function detectTextBoxes(
+  file: File,
+  provider: string = "custom"
+): Promise<DetectResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("provider", provider);
+  const res = await fetch(`${API_URL}/api/v1/pipeline/detect`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Detection failed");
+  }
+  return (await res.json()) as DetectResponse;
+}
+
+export async function runOcr(
+  file: File,
+  regions: DetectRegion[],
+  provider: string = "custom"
+): Promise<OcrResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("regions_json", JSON.stringify(regions));
+  form.append("provider", provider);
+  const res = await fetch(`${API_URL}/api/v1/pipeline/ocr`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "OCR failed");
+  }
+  return (await res.json()) as OcrResponse;
+}
+
+export async function cleanImage(
+  file: File,
+  regions: MaskRegion[],
+  provider: string = "custom"
+): Promise<CleanResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("regions_json", JSON.stringify(regions));
+  form.append("provider", provider);
+  const res = await fetch(`${API_URL}/api/v1/pipeline/clean`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || "Cleaning failed");
+  }
+  return (await res.json()) as CleanResponse;
 }

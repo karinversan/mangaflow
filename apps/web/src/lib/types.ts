@@ -12,6 +12,32 @@ export type DetectedRegion = {
   source_text: string;
   translated_text: string;
   confidence: number;
+  label?: string;
+};
+
+export type DetectRegion = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence: number;
+  label: string;
+  polygon?: Point[] | null;
+};
+
+export type DetectResponse = {
+  image_width: number;
+  image_height: number;
+  regions: DetectRegion[];
+};
+
+export type OcrResponse = {
+  texts: string[];
+};
+
+export type CleanResponse = {
+  inpainted_b64: string;
 };
 
 export type PipelineResponse = {

@@ -10,9 +10,14 @@ providers:
     stages: [detector, inpainter, ocr, translator]
     model: local-custom
     version: v1
+    model_path: models/yolo26s-seg.pt
+    ocr_engine: manga-ocr
+    translator_engine: openrouter
     capabilities:
       - polygon-mask
       - local-model
+      - manga-ocr
+      - openrouter-translation
   stub:
     enabled: true
     stages: [detector, inpainter, ocr, translator]

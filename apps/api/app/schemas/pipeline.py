@@ -230,3 +230,36 @@ class ProviderRead(BaseModel):
     version: str
     capabilities: list[str]
     health: ProviderHealthRead
+
+
+# ---------------------------------------------------------------------------
+# Per-stage request/response schemas
+# ---------------------------------------------------------------------------
+
+class DetectRegionPayload(BaseModel):
+    id: str
+    x: float = Field(ge=0, le=100)
+    y: float = Field(ge=0, le=100)
+    width: float = Field(ge=0, le=100)
+    height: float = Field(ge=0, le=100)
+    confidence: float = Field(ge=0, le=1)
+    label: str
+    polygon: list[PointPayload] | None = None
+
+
+class DetectResponse(BaseModel):
+    image_width: int
+    image_height: int
+    regions: list[DetectRegionPayload]
+
+
+class OcrRequest(BaseModel):
+    regions: list[DetectRegionPayload]
+
+
+class OcrResponse(BaseModel):
+    texts: list[str]
+
+
+class CleanResponse(BaseModel):
+    inpainted_b64: str
