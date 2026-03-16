@@ -1,0 +1,57 @@
+{
+  "model_path": "/Users/versache-karinndzi/Desktop/manga_translate_project/apps/api/models/best.pt",
+  "data_yaml": "/Users/versache-karinndzi/Desktop/manga_translate_project/manga_pipeline_notebooks/dataset/data_eval.yaml",
+  "split": "test",
+  "val_time_sec": 18.734,
+  "ultralytics_metrics": {
+    "metrics/precision(B)": 0.44951,
+    "metrics/recall(B)": 0.29025,
+    "metrics/mAP50(B)": 0.37413,
+    "metrics/mAP50-95(B)": 0.28516,
+    "metrics/precision(M)": 0.45264,
+    "metrics/recall(M)": 0.29864,
+    "metrics/mAP50(M)": 0.39423,
+    "metrics/mAP50-95(M)": 0.26414,
+    "fitness": 0.5493,
+    "seg.map": 0.26414,
+    "seg.map50": 0.39423,
+    "seg.mp": 0.45264,
+    "seg.mr": 0.29864,
+    "box.map": 0.28516,
+    "box.map50": 0.37413,
+    "box.mp": 0.44951,
+    "box.mr": 0.29025
+  },
+  "pixel_metrics": {
+    "class_names": [
+      "background_text",
+      "buble_text",
+      "meta_text",
+      "narration_text",
+      "sfx"
+    ],
+    "dice_per_class": [
+      0.0225,
+      0.78412,
+      0.00968,
+      0.0,
+      0.38472
+    ],
+    "iou_per_class": [
+      0.01192,
+      0.66647,
+      0.00494,
+      0.0,
+      0.31883
+    ],
+    "images_per_class": [
+      5,
+      8,
+      4,
+      2,
+      8
+    ],
+    "mean_dice": 0.2402,
+    "mean_iou": 0.20043
+  }
+}
