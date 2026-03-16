@@ -14,6 +14,9 @@ services:
   api:
     build:
       context: ../apps/api
+    env_file:
+      - path: .env
+        required: false
     environment:
       API_ENV: development
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://localhost:3300}
@@ -32,7 +35,8 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: manga-pages
-      DETECTION_YOLO_MODEL_PATH: models/yolo26s-seg.pt
+      DETECTION_YOLO_MODEL_PATH: models/best.pt
+      DETECTION_ALLOWED_LABELS: bubble_text,narrative_text,background_text,meta_text,sfx
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/hunter-alpha}
     ports:
@@ -48,6 +52,9 @@ services:
     build:
       context: ../apps/api
     command: python -m app.worker
+    env_file:
+      - path: .env
+        required: false
     environment:
       API_ENV: development
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://localhost:3300}
@@ -66,7 +73,8 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: manga-pages
-      DETECTION_YOLO_MODEL_PATH: models/yolo26s-seg.pt
+      DETECTION_YOLO_MODEL_PATH: models/best.pt
+      DETECTION_ALLOWED_LABELS: bubble_text,narrative_text,background_text,meta_text,sfx
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/hunter-alpha}
     volumes:
