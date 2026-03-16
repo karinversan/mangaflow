@@ -13,38 +13,70 @@ const steps = [
   {
     id: "01",
     title: "Загрузка страницы",
-    text: "Поддержка PNG/JPEG/WEBP. Страница сразу отображается в рабочем пространстве."
+    text: "Поддержка PNG/JPEG/WEBP. Страница сразу отображается в рабочем пространстве редактора."
   },
   {
     id: "02",
-    title: "Авто-обработка",
-    text: "Детекция текстовых областей, OCR и черновой перевод. Сейчас подключена stub-модель."
+    title: "Детекция + OCR",
+    text: "YOLOv11s-seg находит текстовые области (bubble, sfx, narrative), MangaOCR распознаёт японский текст."
   },
   {
     id: "03",
-    title: "Ручная редактура",
-    text: "Вы редактируете перевод, переставляете блоки и проверяете качество перед выпуском."
+    title: "Перевод + Инпейнтинг",
+    text: "LLM переводит текст через OpenRouter API. SimpleLama удаляет оригинальный текст с фона."
   },
   {
     id: "04",
-    title: "Экспорт",
-    text: "Можно сохранить структуру перевода в JSON и встроить в ваш дальнейший production pipeline."
+    title: "Ручная редактура и экспорт",
+    text: "Двигайте точки полигонов, правьте перевод, удаляйте лишние блоки и экспортируйте результат."
   }
 ];
 
 const features = [
   {
-    title: "Редактор блоков",
-    text: "Выбор сегмента, ручное изменение координат и текста, быстрый фокус на low-confidence блоках."
+    title: "Редактор полигонов",
+    text: "Перемещение вершин сегментации, удаление ненужных регионов, коррекция перевода для каждого блока."
   },
   {
-    title: "Контракт под ML",
-    text: "Frontend не зависит от конкретной модели. Когда ваша модель готова, меняется только backend-адаптер."
+    title: "Pluggable ML-провайдеры",
+    text: "Архитектура провайдеров: легко заменить модель детекции, OCR или перевода без изменений фронтенда."
   },
   {
-    title: "Основа для продакшена",
-    text: "Docker, FastAPI, Postgres, Redis, MinIO, CI и базовая security-конфигурация уже в проекте."
+    title: "Production-ready стек",
+    text: "Docker Compose, FastAPI, Postgres, Redis очереди с retry и dead-letter, MinIO для артефактов, JWT-аутентификация."
   }
+];
+
+const mlMetrics = [
+  { label: "mAP@50 (Mask)", value: "39.4%" },
+  { label: "mAP@50-95 (Mask)", value: "26.4%" },
+  { label: "Dice (bubble_text)", value: "0.784" },
+  { label: "Precision", value: "45.3%" },
+  { label: "Recall", value: "29.9%" },
+  { label: "Классов", value: "5" },
+];
+
+const pipeline = [
+  {
+    stage: "Detect",
+    model: "YOLOv11s-seg",
+    detail: "10.4M параметров, 34.1 GFLOPs. Дообучена на вручную размеченном датасете манги (5 классов)."
+  },
+  {
+    stage: "OCR",
+    model: "MangaOCR",
+    detail: "Vision Encoder-Decoder модель, специализированная на японском тексте в манге. Работает локально."
+  },
+  {
+    stage: "Translate",
+    model: "OpenRouter LLM",
+    detail: "Перевод через API крупных языковых моделей. Поддержка 12+ языков."
+  },
+  {
+    stage: "Clean",
+    model: "SimpleLama",
+    detail: "LaMa (Large Mask Inpainting) — удаление текста с фона по полигональным маскам."
+  },
 ];
 
 export default function HomePage() {
@@ -69,8 +101,11 @@ export default function HomePage() {
             <a href="#how" className="hover:text-white">
               Как работает
             </a>
-            <a href="#features" className="hover:text-white">
-              Возможности
+            <a href="#pipeline" className="hover:text-white">
+              ML Pipeline
+            </a>
+            <a href="#metrics" className="hover:text-white">
+              Метрики
             </a>
             <a href="#stack" className="hover:text-white">
               Стек
@@ -148,20 +183,89 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section id="pipeline" className="mx-auto w-full max-w-7xl px-6 pb-14">
+          <RevealOnScroll>
+            <h2 className="mb-2 text-3xl font-semibold">ML Pipeline</h2>
+            <p className="mb-6 max-w-3xl text-sm text-white/60">
+              Каждая стадия использует отдельную ML-модель. Архитектура провайдеров позволяет заменить любую модель без изменения фронтенда.
+            </p>
+          </RevealOnScroll>
+          <div className="grid gap-4 md:grid-cols-2">
+            {pipeline.map((item, index) => (
+              <RevealOnScroll key={item.stage} delayMs={index * 100}>
+                <article className="panel rounded-2xl p-5">
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-lg bg-[#ff9d42]/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#ff9d42]">
+                      {item.stage}
+                    </span>
+                    <span className="text-sm font-semibold text-white/90">{item.model}</span>
+                  </div>
+                  <p className="mt-3 text-sm text-white/70">{item.detail}</p>
+                </article>
+              </RevealOnScroll>
+            ))}
+          </div>
+        </section>
+
+        <section id="metrics" className="mx-auto w-full max-w-7xl px-6 pb-14">
+          <RevealOnScroll>
+            <h2 className="mb-2 text-3xl font-semibold">Метрики детекции</h2>
+            <p className="mb-6 max-w-3xl text-sm text-white/60">
+              Результаты YOLOv11s-seg на тестовой выборке (10 изображений, 160 аннотаций). Датасет размечен вручную.
+            </p>
+          </RevealOnScroll>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            {mlMetrics.map((m, index) => (
+              <RevealOnScroll key={m.label} delayMs={index * 80}>
+                <div className="panel rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-bold text-[#ff9d42]">{m.value}</p>
+                  <p className="mt-1 text-xs text-white/60">{m.label}</p>
+                </div>
+              </RevealOnScroll>
+            ))}
+          </div>
+
+          <RevealOnScroll delayMs={200}>
+            <div className="panel mt-4 overflow-hidden rounded-2xl">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-white/50">
+                    <th className="px-5 py-3">Класс</th>
+                    <th className="px-5 py-3">Dice</th>
+                    <th className="px-5 py-3">IoU</th>
+                    <th className="px-5 py-3">Изображений</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white/80">
+                  <tr className="border-b border-white/5"><td className="px-5 py-2.5">bubble_text</td><td className="px-5 py-2.5 font-semibold text-[#ff9d42]">0.784</td><td className="px-5 py-2.5">0.667</td><td className="px-5 py-2.5">8</td></tr>
+                  <tr className="border-b border-white/5"><td className="px-5 py-2.5">sfx</td><td className="px-5 py-2.5">0.385</td><td className="px-5 py-2.5">0.319</td><td className="px-5 py-2.5">8</td></tr>
+                  <tr className="border-b border-white/5"><td className="px-5 py-2.5">background_text</td><td className="px-5 py-2.5">0.023</td><td className="px-5 py-2.5">0.012</td><td className="px-5 py-2.5">5</td></tr>
+                  <tr className="border-b border-white/5"><td className="px-5 py-2.5">meta_text</td><td className="px-5 py-2.5">0.010</td><td className="px-5 py-2.5">0.005</td><td className="px-5 py-2.5">4</td></tr>
+                  <tr className="border-b border-white/5"><td className="px-5 py-2.5">narration_text</td><td className="px-5 py-2.5">0.000</td><td className="px-5 py-2.5">0.000</td><td className="px-5 py-2.5">2</td></tr>
+                  <tr className="font-semibold"><td className="px-5 py-2.5">Среднее</td><td className="px-5 py-2.5">0.240</td><td className="px-5 py-2.5">0.200</td><td className="px-5 py-2.5">—</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </RevealOnScroll>
+        </section>
+
         <section id="stack" className="mx-auto w-full max-w-7xl px-6 pb-24">
           <RevealOnScroll>
             <div className="panel rounded-3xl p-7">
-              <h2 className="text-3xl font-semibold">Что уже реализовано в этой версии</h2>
+              <h2 className="text-3xl font-semibold">Технологический стек</h2>
               <p className="mt-3 max-w-4xl text-sm text-white/75">
-                Web-приложение (Next.js), API (FastAPI), stub-пайплайн под будущую ML-модель, хранение истории запусков,
-                Docker Compose окружение и документация по архитектуре, безопасности, DevOps/MLOps. Это не просто макет,
-                а рабочая база, которую можно развивать до production.
+                Full-stack ML-платформа: Next.js фронтенд, FastAPI бэкенд с асинхронными Redis-очередями,
+                PostgreSQL для метаданных, MinIO для артефактов. Всё запускается через Docker Compose одной командой.
               </p>
               <div className="mt-6 grid grid-cols-2 gap-3 text-sm text-white/80 md:grid-cols-4">
-                <span className="rounded-xl bg-black/30 px-4 py-3">Next.js + TS</span>
-                <span className="rounded-xl bg-black/30 px-4 py-3">FastAPI + Python</span>
-                <span className="rounded-xl bg-black/30 px-4 py-3">Postgres + Redis</span>
-                <span className="rounded-xl bg-black/30 px-4 py-3">MinIO + Docker</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">Next.js 15 + TS</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">FastAPI + Python 3.12</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">YOLOv11 + MangaOCR</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">SimpleLama + OpenRouter</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">PostgreSQL 15</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">Redis 7 (очереди)</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">MinIO (S3)</span>
+                <span className="rounded-xl bg-black/30 px-4 py-3">Docker Compose</span>
               </div>
             </div>
           </RevealOnScroll>
