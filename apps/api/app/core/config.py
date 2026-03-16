@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     request_log_enabled: bool = True
     enable_ready_checks: bool = True
     model_runtime_device: str = "auto"
-    detection_yolo_model_path: str = "models/yolo26s-seg.pt"
-    detection_allowed_labels: str = "buble,bubble,text"
+    detection_yolo_model_path: str = "models/best.pt"
+    detection_allowed_labels: str = "bubble_text,narrative_text,sfx,background_text,meta_text"
     detection_conf_threshold: float = 0.25
     detection_iou_threshold: float = 0.45
     inpaint_bubble_expand_px: int = 8
