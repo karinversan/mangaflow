@@ -30,7 +30,7 @@ import { DetectedRegion, DetectRegion, MaskRegion, PipelineConfig, ProjectProgre
 
 type ReviewStatus = "todo" | "edited" | "approved";
 type FilterMode = "all" | "todo" | "edited" | "approved" | "low_confidence" | "empty";
-type ToolMode = "select" | "pan" | "zoom";
+type ToolMode = "select" | "pan" | "zoom" | "draw";
 type EditorMode = "manual" | "automatic";
 
 type EditorRegion = DetectedRegion & {
