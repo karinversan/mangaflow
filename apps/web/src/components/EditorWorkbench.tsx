@@ -781,11 +781,25 @@ export function EditorWorkbench() {
         {/* CENTER: Canvas */}
         <div ref={stageRef} className="relative flex-1 overflow-hidden">
           {/* Interaction overlay for pan/zoom */}
-          <div className={`absolute inset-0 z-20 ${effectiveToolMode === "zoom" ? "cursor-zoom-in" : effectiveToolMode === "pan" ? (panDrag ? "cursor-grabbing" : "cursor-grab") : "cursor-default"}`} style={{ pointerEvents: effectiveToolMode === "select" ? "none" : "auto" }}
+          <div className={`absolute inset-0 z-20 ${effectiveToolMode === "zoom" ? "cursor-zoom-in" : effectiveToolMode === "pan" ? (panDrag ? "cursor-grabbing" : "cursor-grab") : effectiveToolMode === "draw" ? "cursor-crosshair" : "cursor-default"}`} style={{ pointerEvents: effectiveToolMode === "select" ? "none" : "auto" }}
             onMouseDown={e => {
               if (e.button !== 0) return;
               if (effectiveToolMode === "zoom") { zoomAtPoint(e.clientX, e.clientY, e.shiftKey ? -10 : 10); return; }
-              if (effectiveToolMode === "pan") { e.preventDefault(); setPanDrag({ startClientX: e.clientX, startClientY: e.clientY, startX: panOffset.x, startY: panOffset.y }); }
+              if (effectiveToolMode === "pan") { e.preventDefault(); setPanDrag({ startClientX: e.clientX, startClientY: e.clientY, startX: panOffset.x, startY: panOffset.y }); return; }
+              if (effectiveToolMode === "draw" && stageRef.current) {
+                e.preventDefault();
+                const imgLeft = displayedRect.x + panOffset.x;
+                const imgTop = displayedRect.y + panOffset.y;
+                const sr = stageRef.current.getBoundingClientRect();
+                const px = e.clientX - sr.left - imgLeft;
+                const py = e.clientY - sr.top - imgTop;
+                const pctX = clamp((px / displayedRect.width) * 100, 0, 100);
+                const pctY = clamp((py / displayedRect.height) * 100, 0, 100);
+                setDrawingPoints(prev => [...prev, { x: Number(pctX.toFixed(3)), y: Number(pctY.toFixed(3)) }]);
+              }
+            }}
+            onDoubleClick={e => {
+              if (effectiveToolMode === "draw" && drawingPoints.length >= 3) { e.preventDefault(); finishDrawingPolygon(); }
             }} />
 
           {/* Image + regions */}
