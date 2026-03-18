@@ -948,7 +948,8 @@ async def translate_texts(payload: TranslateRequest) -> TranslateResponse:
         return TranslateResponse(translated_texts=translated)
     except Exception as exc:
         pipeline_errors_total.inc()
-        raise HTTPException(status_code=500, detail=f"Translation failed: {exc}") from exc
+        error_msg = str(exc).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+        raise HTTPException(status_code=500, detail=f"Translation failed: {error_msg}") from exc
 
 
 @router.post("/pipeline/run", response_model=PipelineResponse)
@@ -1044,7 +1045,8 @@ async def clean_image(
         return CleanResponse(inpainted_b64=base64.b64encode(inpainted).decode("ascii"))
     except Exception as exc:
         pipeline_errors_total.inc()
-        raise HTTPException(status_code=500, detail="Cleaning failed.") from exc
+        error_msg = str(exc).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+        raise HTTPException(status_code=500, detail=f"Cleaning failed: {error_msg}") from exc
 
 
 @router.get("/pipeline/runs", response_model=list[PipelineRunRead])
