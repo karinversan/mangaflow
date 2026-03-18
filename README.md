@@ -45,9 +45,8 @@
 
 ### Результат перевода
 
-<!-- TODO: Скриншот до/после — оригинал и переведённая страница рядом -->
 <p align="center">
-  <img src="docs/screenshots/before_after.png" alt="До и после перевода" width="800" />
+  <img src="docs/screenshots/before_after.jpg" alt="До и после перевода" width="800" />
 </p>
 
 ---
