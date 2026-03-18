@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/public/logo.svg" alt="MangaFlow" width="80" />
+  <img src="docs/screenshots/logo.png" alt="MangaFlow" width="80" />
 </p>
 
 <h1 align="center">MangaFlow</h1>
@@ -36,14 +36,12 @@
 
 ## 🖼️ Интерфейс
 
-<!-- TODO: Скриншот лендинга -->
 <p align="center">
   <img src="docs/screenshots/landing.png" alt="Лендинг MangaFlow" width="800" />
 </p>
 
 ### Редактор
 
-<!-- TODO: Скриншот редактора с загруженной страницей и детектированными регионами -->
 <p align="center">
   <img src="docs/screenshots/editor_detect.png" alt="Редактор — детекция текстовых областей" width="800" />
 </p>
@@ -97,7 +95,6 @@
 - 5 классов: `bubble_text`, `narrative_text`, `background_text`, `meta_text`, `sfx`
 - Train / Val / Test split
 
-<!-- TODO: Примеры разметки — оригинал и наложение масок -->
 <p align="center">
   <img src="docs/screenshots/dataset_annotations.png" alt="Примеры разметки датасета" width="700" />
 </p>
@@ -135,15 +132,6 @@
 ### 4. Инпейнтинг (SimpleLama)
 
 [SimpleLama](https://github.com/enesmsahin/simple-lama-inpainting) — обёртка над LaMa (Large Mask Inpainting). Удаляет текст с изображения, восстанавливая фон под текстовыми областями. Используются полигональные маски из стадии детекции.
-
-### Пример работы пайплайна
-
-<!-- TODO: 4 картинки в ряд — Original → Detect → Clean → Translated -->
-<p align="center">
-  <img src="docs/screenshots/pipeline_stages.png" alt="Стадии пайплайна" width="800" />
-</p>
-
----
 
 ## 🚀 Быстрый старт
 
