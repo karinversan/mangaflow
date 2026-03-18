@@ -19,3 +19,4 @@ ultralytics>=8.4.0
 manga-ocr==0.1.14
 httpx==0.28.1
 opencv-python-headless>=4.8.0
+simple-lama-inpainting==0.1.0
