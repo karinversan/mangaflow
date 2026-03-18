@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="docs/screenshots/logo.png" alt="MangaFlow" width="80" />
-</p>
 
 <h1 align="center">MangaFlow</h1>
 
